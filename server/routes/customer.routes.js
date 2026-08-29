@@ -1,0 +1,143 @@
+const express = require('express');
+const router = express.Router();
+const Customer = require('../models/Customer');
+const Sale = require('../models/Sale');
+const { CustomerLedger, CustomerPayment } = require('../models/Ledger');
+const { protect, authorize } = require('../middleware/auth');
+
+// GET /api/customers
+router.get('/', protect, async (req, res) => {
+  try {
+    const { search, type, status, page = 1, limit = 50 } = req.query;
+    const query = {};
+    if (search) query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { mobile: { $regex: search, $options: 'i' } },
+      { customerId: { $regex: search, $options: 'i' } },
+    ];
+    if (type) query.customerType = type;
+    if (status) query.status = status;
+    const total = await Customer.countDocuments(query);
+    const customers = await Customer.find(query).sort({ name: 1 }).skip((page - 1) * limit).limit(Number(limit));
+    res.json({ success: true, data: customers, total, page: Number(page), pages: Math.ceil(total / limit) });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// GET /api/customers/search?name=Ramesh — returns ALL matching (for disambiguation)
+router.get('/search', protect, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json({ success: true, data: [] });
+    const customers = await Customer.find({
+      $or: [
+        { name: { $regex: q, $options: 'i' } },
+        { mobile: { $regex: q, $options: 'i' } },
+        { customerId: { $regex: q, $options: 'i' } },
+      ],
+      status: 'active'
+    }).limit(20);
+    res.json({ success: true, data: customers });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// GET /api/customers/:id
+router.get('/:id', protect, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
+    res.json({ success: true, data: customer });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// GET /api/customers/:id/purchases — purchase history
+router.get('/:id/purchases', protect, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const sales = await Sale.find({ customer: req.params.id, status: { $ne: 'cancelled' } })
+      .sort({ saleDate: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+    const total = await Sale.countDocuments({ customer: req.params.id, status: { $ne: 'cancelled' } });
+    res.json({ success: true, data: sales, total, page: Number(page), pages: Math.ceil(total / limit) });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// GET /api/customers/:id/ledger
+router.get('/:id/ledger', protect, async (req, res) => {
+  try {
+    const ledger = await CustomerLedger.find({ customer: req.params.id }).sort({ createdAt: 1 });
+    res.json({ success: true, data: ledger });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// GET /api/customers/:id/frequent-products — for POS
+router.get('/:id/frequent-products', protect, async (req, res) => {
+  try {
+    const sales = await Sale.find({ customer: req.params.id, status: 'completed' });
+    const freq = {};
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        const key = item.product?.toString();
+        if (!key) continue;
+        if (!freq[key]) freq[key] = { product: item.product, name: item.productName, count: 0, totalQty: 0 };
+        freq[key].count++;
+        freq[key].totalQty += item.quantity;
+      }
+    }
+    const sorted = Object.values(freq).sort((a, b) => b.count - a.count).slice(0, 10);
+    res.json({ success: true, data: sorted });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// POST /api/customers
+router.post('/', protect, async (req, res) => {
+  try {
+    const customer = await Customer.create(req.body);
+    res.status(201).json({ success: true, data: customer, message: 'Customer created successfully' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// PUT /api/customers/:id
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
+    res.json({ success: true, data: customer, message: 'Customer updated successfully' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// POST /api/customers/:id/payment — record payment
+router.post('/:id/payment', protect, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
+    const { amount, paymentMethod, reference, notes } = req.body;
+
+    // Record payment
+    const count = await CustomerPayment.countDocuments();
+    const payment = await CustomerPayment.create({
+      paymentNumber: `CPAY-${String(count + 1).padStart(5, '0')}`,
+      customer: customer._id,
+      amount, paymentMethod, reference, notes,
+      createdBy: req.user._id,
+    });
+
+    // Update ledger
+    const balanceBefore = customer.outstandingBalance;
+    const balanceAfter = balanceBefore - amount;
+    await CustomerLedger.create({
+      customer: customer._id,
+      type: 'payment', amount: -amount,
+      reference: payment.paymentNumber, referenceId: payment._id,
+      balanceBefore, balanceAfter,
+      description: `Payment received - ${paymentMethod}`,
+      createdBy: req.user._id,
+    });
+    customer.outstandingBalance = balanceAfter;
+    await customer.save();
+
+    res.status(201).json({ success: true, data: payment, message: 'Payment recorded successfully' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+module.exports = router;
