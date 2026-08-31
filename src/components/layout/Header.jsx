@@ -84,6 +84,23 @@ export function getNotificationIcon(type, severity) {
   );
 }
 
+function playNotificationChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch {}
+}
+
 export default function Header({ onMenuToggle, sidebarCollapsed }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -93,18 +110,71 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const userMenuRef = useRef(null);
   const notifRef = useRef(null);
+  const knownNotifIdsRef = useRef(new Set());
+  const initialFetchDoneRef = useRef(false);
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000); // refresh every 15s
+    // Fast 5-second polling so neither admin nor cashier misses any incoming orders or status changes
+    const interval = setInterval(fetchNotifications, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
-      setNotifications(res.data.data || []);
-      setUnreadCount(res.data.unreadCount || 0);
+      const data = res.data.data || [];
+      const unread = res.data.unreadCount || 0;
+
+      // Detect brand new notifications for real-time sound and toast alert
+      if (initialFetchDoneRef.current) {
+        const newUnreadItems = data.filter(n => !n.isRead && !knownNotifIdsRef.current.has(n._id));
+        if (newUnreadItems.length > 0) {
+          playNotificationChime();
+          newUnreadItems.forEach(item => {
+            toast(
+              (t) => (
+                <div className="flex items-center justify-between gap-3 text-xs w-full">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-extrabold text-gray-900 leading-snug">{item.title}</p>
+                    <p className="text-gray-500 text-[11px] truncate mt-0.5">{item.message}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      toast.dismiss(t.id);
+                      const targetRoute = getNotificationRoute(item);
+                      navigate(targetRoute);
+                    }}
+                    className="btn-primary text-xs py-1 px-2.5 font-bold shrink-0 cursor-pointer shadow-xs"
+                  >
+                    View
+                  </button>
+                </div>
+              ),
+              {
+                duration: 6000,
+                position: 'top-right',
+                icon: item.type === 'new_order' ? '🛒' : '🔔',
+                style: {
+                  background: '#ffffff',
+                  color: '#111827',
+                  border: '1.5px solid #22c55e',
+                  padding: '10px 14px',
+                  borderRadius: '16px',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                }
+              }
+            );
+          });
+        }
+      }
+
+      // Update known IDs
+      data.forEach(n => knownNotifIdsRef.current.add(n._id));
+      initialFetchDoneRef.current = true;
+
+      setNotifications(data);
+      setUnreadCount(unread);
     } catch {}
   };
 
@@ -164,7 +234,7 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
   const unreadNotifications = notifications.filter(n => !n.isRead);
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4 shrink-0 relative z-30">
+    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4 shrink-0 relative">
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Universal Menu / Hamburger Toggle Button for ALL Screens (Desktop + Mobile) */}
         <button

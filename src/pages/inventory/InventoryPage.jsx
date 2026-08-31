@@ -56,105 +56,115 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
-            <h3 className="font-bold text-lg text-gray-900">Adjust Stock</h3>
+            <h3 className="font-extrabold text-lg text-gray-900">Adjust Stock</h3>
             <p className="text-xs text-gray-500">Changes are logged permanently to the audit ledger</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+            title="Close form"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Category Filter for Quick Selection */}
-          <div>
-            <label className="form-label text-xs font-bold">Category</label>
-            <select
-              className="form-select text-xs"
-              value={selectedCat}
-              onChange={e => {
-                setSelectedCat(e.target.value);
-                setProductId('');
-              }}
-            >
-              <option value="all">-- All Categories --</option>
-              {categories.map(c => (
-                <option key={c._id} value={c._id}>
-                  {CATEGORY_ICONS[c.name.toLowerCase()] || '📦'} {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="form-label text-xs font-bold">Select Product *</label>
-            <select
-              className="form-select font-semibold text-sm"
-              required
-              value={productId}
-              onChange={e => setProductId(e.target.value)}
-            >
-              <option value="">-- Choose Product ({filteredProducts.length} items) --</option>
-              {filteredProducts.map(p => (
-                <option key={p._id} value={p._id}>
-                  {p.name} (Current Stock: {p.currentStock} {p.unit?.symbol || ''})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedProduct && (
-            <div className="p-3 bg-primary-50/50 rounded-xl text-xs flex justify-between border border-primary-200">
-              <span className="text-primary-800 font-medium">Current Stock Balance:</span>
-              <span className="font-extrabold text-primary-900">
-                {selectedProduct.currentStock} {selectedProduct.unit?.symbol || 'units'}
-              </span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} autoComplete="on" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Category Filter for Quick Selection */}
             <div>
-              <label className="form-label text-xs font-bold">Adjustment Qty *</label>
-              <input
-                type="number"
-                required
-                className="form-input font-extrabold text-sm"
-                placeholder="e.g. -2 or +5"
-                value={adjustedQty}
-                onChange={e => setAdjustedQty(e.target.value)}
-              />
-              <span className="text-[10px] text-gray-400">Negative (-) to reduce</span>
-            </div>
-            <div>
-              <label className="form-label text-xs font-bold">Type</label>
-              <select className="form-select text-xs" value={type} onChange={e => setType(e.target.value)}>
-                <option value="correction">Audit Correction</option>
-                <option value="damage">Damaged Goods</option>
-                <option value="expiry">Expired Stock</option>
-                <option value="theft">Lost / Theft</option>
-                <option value="other">Other</option>
+              <label className="form-label text-xs font-bold">Category</label>
+              <select
+                className="form-select text-xs"
+                value={selectedCat}
+                onChange={e => {
+                  setSelectedCat(e.target.value);
+                  setProductId('');
+                }}
+              >
+                <option value="all">-- All Categories --</option>
+                {categories.map(c => (
+                  <option key={c._id} value={c._id}>
+                    {CATEGORY_ICONS[c.name.toLowerCase()] || '📦'} {c.name}
+                  </option>
+                ))}
               </select>
             </div>
+
+            <div>
+              <label className="form-label text-xs font-bold">Select Product *</label>
+              <select
+                className="form-select font-semibold text-sm"
+                required
+                value={productId}
+                onChange={e => setProductId(e.target.value)}
+              >
+                <option value="">-- Choose Product ({filteredProducts.length} items) --</option>
+                {filteredProducts.map(p => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} (Current Stock: {p.currentStock} {p.unit?.symbol || ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedProduct && (
+              <div className="p-3 bg-primary-50/50 rounded-xl text-xs flex justify-between border border-primary-200">
+                <span className="text-primary-800 font-medium">Current Stock Balance:</span>
+                <span className="font-extrabold text-primary-900">
+                  {selectedProduct.currentStock} {selectedProduct.unit?.symbol || 'units'}
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="form-label text-xs font-bold">Adjustment Qty *</label>
+                <input
+                  type="number"
+                  required
+                  className="form-input text-sm font-bold"
+                  placeholder="e.g. +5 or -2"
+                  value={adjustedQty}
+                  onChange={e => setAdjustedQty(e.target.value)}
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">Positive (+) or Negative (-)</p>
+              </div>
+
+              <div>
+                <label className="form-label text-xs font-bold">Type</label>
+                <select className="form-select text-xs" value={type} onChange={e => setType(e.target.value)}>
+                  <option value="correction">Audit Correction</option>
+                  <option value="damage">Damaged Goods</option>
+                  <option value="expiry">Expired Stock</option>
+                  <option value="theft">Lost / Theft</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label text-xs font-bold">Reason * (Mandatory for audit)</label>
+              <textarea
+                required
+                rows={2}
+                className="form-input text-xs"
+                placeholder="e.g. Physical inventory verification discrepancy"
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="form-label text-xs font-bold">Reason * (Mandatory for audit)</label>
-            <textarea
-              required
-              rows={2}
-              className="form-input text-xs"
-              placeholder="e.g. Physical inventory verification discrepancy"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">
+          <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3 shrink-0">
+            <button type="button" onClick={onClose} className="btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer">
               Cancel
             </button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1 font-bold">
+            <button type="submit" disabled={loading} className="btn-primary py-2.5 px-6 text-xs font-bold shadow-md cursor-pointer">
               {loading ? 'Adjusting...' : 'Save Adjustment'}
             </button>
           </div>

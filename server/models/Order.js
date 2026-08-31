@@ -22,8 +22,18 @@ const orderSchema = new mongoose.Schema({
     default: 'pending'
   },
   sentToBilling: { type: Boolean, default: false },
+  sentToBillingBy: { type: String },
   billedAs: { type: mongoose.Schema.Types.ObjectId, ref: 'Sale' },
   confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  confirmedByName: { type: String },
+  confirmedByRole: { type: String },
+  confirmedAt: { type: Date },
+  statusLogs: [{
+    status: { type: String },
+    changedBy: { type: String },
+    changedByRole: { type: String },
+    changedAt: { type: Date, default: Date.now }
+  }],
   deliveryCharge: { type: Number, default: 0 },
 }, { timestamps: true });
 

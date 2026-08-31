@@ -35,47 +35,103 @@ function SupplierModal({ supplier, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-lg w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b">
-          <h3 className="font-bold text-lg text-gray-900">{supplier ? 'Edit Supplier' : 'Add Supplier'}</h3>
-          <button onClick={onClose}>✕</button>
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
+          <div>
+            <h3 className="font-extrabold text-lg text-gray-900">{supplier ? 'Edit Supplier' : 'Add Supplier'}</h3>
+            <p className="text-xs text-gray-500">Maintain supplier vendor directory & payment terms</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+            title="Close form"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="form-label">Contact Person Name *</label>
-              <input className="form-input" required value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Ramesh Kumar" />
-            </div>
-            <div>
-              <label className="form-label">Company / Business Name</label>
-              <input className="form-input" value={form.company} onChange={e => set('company', e.target.value)} placeholder="e.g. Sri Murugan Traders" />
-            </div>
-            <div>
-              <label className="form-label">Mobile Number *</label>
-              <input className="form-input" required value={form.mobile} onChange={e => set('mobile', e.target.value)} placeholder="9876543210" />
-            </div>
-            <div>
-              <label className="form-label">GSTIN</label>
-              <input className="form-input" value={form.gstin} onChange={e => set('gstin', e.target.value)} placeholder="33AAAAA0000A1Z5" />
-            </div>
-            <div className="col-span-2">
-              <label className="form-label">Address</label>
-              <input className="form-input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Street / Market Address" />
-            </div>
-            <div>
-              <label className="form-label">City</label>
-              <input className="form-input" value={form.city} onChange={e => set('city', e.target.value)} />
-            </div>
-            <div>
-              <label className="form-label">Payment Terms</label>
-              <input className="form-input" value={form.paymentTerms} onChange={e => set('paymentTerms', e.target.value)} placeholder="e.g. Net 15 days" />
+
+        <form onSubmit={handleSubmit} autoComplete="on" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="form-label font-bold text-xs">Contact Person Name *</label>
+                <input
+                  className="form-input text-sm"
+                  required
+                  autoComplete="name"
+                  value={form.name}
+                  onChange={e => set('name', e.target.value)}
+                  placeholder="e.g. Ramesh Kumar"
+                />
+              </div>
+              <div>
+                <label className="form-label font-bold text-xs">Company / Business Name</label>
+                <input
+                  className="form-input text-sm"
+                  autoComplete="organization"
+                  value={form.company}
+                  onChange={e => set('company', e.target.value)}
+                  placeholder="e.g. Sri Murugan Traders"
+                />
+              </div>
+              <div>
+                <label className="form-label font-bold text-xs">Mobile Number *</label>
+                <input
+                  className="form-input text-sm"
+                  required
+                  type="tel"
+                  autoComplete="tel"
+                  maxLength={10}
+                  value={form.mobile}
+                  onChange={e => set('mobile', e.target.value.replace(/\D/g, ''))}
+                  placeholder="98765 43210"
+                />
+              </div>
+              <div>
+                <label className="form-label font-bold text-xs">GSTIN</label>
+                <input
+                  className="form-input text-sm uppercase font-mono"
+                  value={form.gstin}
+                  onChange={e => set('gstin', e.target.value)}
+                  placeholder="33AAAAA0000A1Z5"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="form-label text-xs">Address</label>
+                <input
+                  className="form-input text-sm"
+                  autoComplete="street-address"
+                  value={form.address}
+                  onChange={e => set('address', e.target.value)}
+                  placeholder="Street / Market Address"
+                />
+              </div>
+              <div>
+                <label className="form-label text-xs">City</label>
+                <input
+                  className="form-input text-sm"
+                  autoComplete="address-level2"
+                  value={form.city}
+                  onChange={e => set('city', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="form-label text-xs">Payment Terms</label>
+                <input
+                  className="form-input text-sm"
+                  value={form.paymentTerms}
+                  onChange={e => set('paymentTerms', e.target.value)}
+                  placeholder="e.g. Net 15 days"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1">
+          <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3 shrink-0">
+            <button type="button" onClick={onClose} className="btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer">Cancel</button>
+            <button type="submit" disabled={loading} className="btn-primary py-2.5 px-6 text-xs font-bold shadow-md cursor-pointer">
               {loading ? 'Saving...' : supplier ? 'Update Supplier' : 'Save Supplier'}
             </button>
           </div>

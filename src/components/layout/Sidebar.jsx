@@ -33,7 +33,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
   const { isAdmin, isManager } = useAuth();
 
   const renderNavLinks = (isMobile = false) => (
-    <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 scrollbar-hide">
+    <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 sidebar-scrollbar">
       <NavItem
         to="/dashboard"
         icon={LayoutDashboard}

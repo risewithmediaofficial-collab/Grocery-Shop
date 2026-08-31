@@ -4,7 +4,7 @@ import {
   ShoppingCart, Package, CheckCircle, Clock, Search, Plus, Minus,
   X, ExternalLink, RefreshCw, Send, Copy, Phone, MapPin, Eye,
   Loader2, Truck, CheckCheck, FileText, ChevronRight, User, AlertCircle,
-  CheckCircle2, Layers
+  CheckCircle2, Layers, ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -66,7 +66,16 @@ export default function OrdersPage() {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+    // Auto-sync incoming orders & status updates between Admin and Cashier every 8 seconds
+    const interval = setInterval(() => {
+      api.get('/orders').then(res => {
+        if (res.data?.data) setOrders(res.data.data);
+      }).catch(() => {});
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   // Structured categories
   const categories = useMemo(() => {
@@ -93,7 +102,7 @@ export default function OrdersPage() {
   }, [orders]);
 
   const completedOrdersCount = useMemo(() => {
-    return orders.filter(o => o.status === 'delivered' || o.sentToBilling || o.status === 'confirmed').length;
+    return orders.filter(o => o.status === 'delivered' || o.sentToBilling === true).length;
   }, [orders]);
 
   // Filter products for Create Order mode
@@ -112,7 +121,7 @@ export default function OrdersPage() {
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       // 1. Separate Active vs Completed tab
-      const isCompleted = o.status === 'delivered' || o.sentToBilling || o.status === 'confirmed';
+      const isCompleted = o.status === 'delivered' || o.sentToBilling === true;
       if (queueTab === 'active' && isCompleted) return false;
       if (queueTab === 'completed' && !isCompleted) return false;
 
@@ -503,7 +512,7 @@ export default function OrdersPage() {
                     filteredOrders.map(ord => {
                       const isProcessing = processingOrderId === ord._id;
                       const itemCount = (ord.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
-                      const isCompleted = ord.status === 'delivered' || ord.sentToBilling || ord.status === 'confirmed';
+                      const isCompleted = ord.status === 'delivered' || ord.sentToBilling === true;
 
                       return (
                         <tr key={ord._id} className={clsx('transition-colors', isCompleted ? 'bg-gray-50/30 hover:bg-gray-50/70' : 'hover:bg-primary-50/20')}>
@@ -526,11 +535,26 @@ export default function OrdersPage() {
                           {/* Customer Name & Date */}
                           <td className="py-4 px-5">
                             <p className="font-extrabold text-gray-900 text-sm leading-snug">{ord.customerName}</p>
-                            <span className="text-xs text-gray-400 font-medium">
+                            <span className="text-xs text-gray-400 font-medium block">
                               {new Date(ord.createdAt).toLocaleDateString('en-IN', {
                                 day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
                               })}
                             </span>
+                            {ord.confirmedByName && (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                                  <CheckCircle size={10} className="text-emerald-600" />
+                                  <span>Accepted by {ord.confirmedByName}</span>
+                                </span>
+                              </div>
+                            )}
+                            {ord.sentToBilling && (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 shadow-2xs">
+                                  <span>🚀 POS: {ord.sentToBillingBy || ord.confirmedByName || 'Admin'}</span>
+                                </span>
+                              </div>
+                            )}
                           </td>
 
                           {/* Mobile */}
@@ -624,14 +648,8 @@ export default function OrdersPage() {
 
       {/* DEDICATED ORDER DETAILS & DELIVERY FORM MODAL */}
       {selectedOrderDetails && (
-        <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={() => setSelectedOrderDetails(null)}
-        >
-          <div
-            className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] my-auto flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
               <div className="flex items-center gap-3">
@@ -723,6 +741,38 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Staff Acceptance & Activity Trail Box */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs space-y-2.5">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-primary-600" />
+                  <span>Order Acceptance & Staff Activity:</span>
+                </h4>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {selectedOrderDetails.confirmedByName ? (
+                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
+                      <CheckCircle size={14} className="text-emerald-600" />
+                      <span>Accepted by: <strong>{selectedOrderDetails.confirmedByName}</strong> ({selectedOrderDetails.confirmedByRole || 'Admin'})</span>
+                      {selectedOrderDetails.confirmedAt && (
+                        <span className="text-emerald-700 text-[11px] font-normal">
+                          · {new Date(selectedOrderDetails.confirmedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 text-amber-800 border border-amber-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5">
+                      <Clock size={14} className="text-amber-600" />
+                      <span>Awaiting staff acceptance / review</span>
+                    </div>
+                  )}
+
+                  {selectedOrderDetails.sentToBilling && (
+                    <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
+                      <span>🚀 Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.confirmedByName || 'Admin'}</strong></span>
+                    </div>
+                  )}
                 </div>
               </div>
 

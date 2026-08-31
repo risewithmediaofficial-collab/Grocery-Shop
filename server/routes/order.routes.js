@@ -134,8 +134,40 @@ router.put('/:id/status', protect, async (req, res) => {
     const { status } = req.body;
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    
     order.status = status;
+    order.confirmedBy = req.user._id;
+    order.confirmedByName = req.user.name || 'Admin';
+    order.confirmedByRole = req.user.role || 'admin';
+    order.confirmedAt = new Date();
+
+    if (!order.statusLogs) order.statusLogs = [];
+    order.statusLogs.push({
+      status,
+      changedBy: req.user.name || 'Admin',
+      changedByRole: req.user.role || 'admin',
+      changedAt: new Date()
+    });
+
     await order.save();
+
+    // Create real-time notification for Cashiers and Team
+    try {
+      const statusTitle = status === 'confirmed'
+        ? `✅ Order #${order.orderNumber} Accepted by ${req.user.name}`
+        : `🔄 Order #${order.orderNumber} Updated to "${status.replace(/_/g, ' ')}" by ${req.user.name}`;
+
+      await Notification.create({
+        type: 'new_order',
+        title: statusTitle,
+        message: `${req.user.name} (${req.user.role}) changed status of Order #${order.orderNumber} for ${order.customerName || 'Customer'} to "${status.replace(/_/g, ' ')}".`,
+        severity: status === 'confirmed' ? 'success' : 'info',
+        relatedId: order._id,
+        relatedModel: 'Order',
+      });
+    } catch (notifErr) {
+      console.error('Order status notification error:', notifErr);
+    }
 
     // Automatically send WhatsApp status update in background
     whatsappService.sendOrderStatusAutoMessage(order, status).catch(e => console.error('WhatsApp auto-send error:', e));
@@ -151,9 +183,39 @@ router.post('/:id/send-to-billing', protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    
     order.sentToBilling = true;
+    order.sentToBillingBy = req.user.name || 'Admin';
     order.status = 'confirmed';
+    order.confirmedBy = req.user._id;
+    order.confirmedByName = req.user.name || 'Admin';
+    order.confirmedByRole = req.user.role || 'admin';
+    order.confirmedAt = new Date();
+
+    if (!order.statusLogs) order.statusLogs = [];
+    order.statusLogs.push({
+      status: 'confirmed',
+      changedBy: req.user.name || 'Admin',
+      changedByRole: req.user.role || 'admin',
+      changedAt: new Date()
+    });
+
     await order.save();
+
+    // Create prominent notification for Cashier
+    try {
+      await Notification.create({
+        type: 'new_order',
+        title: `🚀 Order #${order.orderNumber} Sent to POS by ${req.user.name}`,
+        message: `${req.user.name} (${req.user.role}) accepted & sent Order #${order.orderNumber} for ${order.customerName || 'Customer'} to the Billing Counter.`,
+        severity: 'info',
+        relatedId: order._id,
+        relatedModel: 'Order',
+      });
+    } catch (notifErr) {
+      console.error('Send to billing notification error:', notifErr);
+    }
+
     res.json({ success: true, data: order, message: 'Order sent to Billing POS' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

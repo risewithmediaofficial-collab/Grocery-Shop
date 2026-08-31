@@ -37,85 +37,140 @@ function CustomerFormModal({ customer, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 overflow-y-auto p-4 flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-lg w-full shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b">
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
-            <h2 className="font-bold text-lg text-gray-900">{customer ? 'Edit Customer' : 'Add New Customer'}</h2>
-            <p className="text-xs text-gray-500">Customer identifier is uniquely assigned by ID</p>
+            <h2 className="font-extrabold text-lg text-gray-900">{customer ? 'Edit Customer' : 'Add New Customer'}</h2>
+            <p className="text-xs text-gray-500">Maintain customer profile, credit ledger & GST details</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+            title="Close form"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Basic Info</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 sm:col-span-1">
-                <label className="form-label">Full Name *</label>
-                <input className="form-input" required value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Ramesh Kumar" />
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <label className="form-label">Customer Type</label>
-                <select className="form-select" value={form.customerType} onChange={e => set('customerType', e.target.value)}>
-                  <option value="regular">Regular</option>
-                  <option value="credit">Credit / Udhaar</option>
-                  <option value="wholesale">Wholesale</option>
-                  <option value="walk-in">Walk-in</option>
-                </select>
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <label className="form-label">Mobile Number *</label>
-                <input className="form-input" required value={form.mobile} onChange={e => set('mobile', e.target.value)} placeholder="e.g. 9876543210" />
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <label className="form-label">Alt Mobile</label>
-                <input className="form-input" value={form.altMobile} onChange={e => set('altMobile', e.target.value)} placeholder="Optional" />
-              </div>
-            </div>
-          </div>
 
-          <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Address & Location</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="form-label">Address</label>
-                <input className="form-input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Door no, Street, Landmark" />
-              </div>
-              <div>
-                <label className="form-label">City</label>
-                <input className="form-input" value={form.city} onChange={e => set('city', e.target.value)} />
-              </div>
-              <div>
-                <label className="form-label">State</label>
-                <input className="form-input" value={form.state} onChange={e => set('state', e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Credit & GST</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="form-label">GSTIN (Optional)</label>
-                <input className="form-input" value={form.gstin} onChange={e => set('gstin', e.target.value)} placeholder="33AAAAA0000A1Z5" />
-              </div>
-              <div>
-                <label className="form-label">Credit Limit (₹)</label>
-                <input className="form-input" type="number" value={form.creditLimit} onChange={e => set('creditLimit', Number(e.target.value))} placeholder="0" />
-              </div>
-              {!customer && (
-                <div>
-                  <label className="form-label">Opening Balance (₹)</label>
-                  <input className="form-input" type="number" value={form.openingBalance} onChange={e => set('openingBalance', Number(e.target.value))} placeholder="0" />
+        <form onSubmit={handleSubmit} autoComplete="on" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Basic Info</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="form-label font-bold text-xs">Full Name *</label>
+                  <input
+                    className="form-input text-sm"
+                    required
+                    autoComplete="name"
+                    value={form.name}
+                    onChange={e => set('name', e.target.value)}
+                    placeholder="e.g. Ramesh Kumar"
+                  />
                 </div>
-              )}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="form-label font-bold text-xs">Customer Type</label>
+                  <select className="form-select text-sm" value={form.customerType} onChange={e => set('customerType', e.target.value)}>
+                    <option value="regular">Regular</option>
+                    <option value="credit">Credit / Udhaar</option>
+                    <option value="wholesale">Wholesale</option>
+                    <option value="walk-in">Walk-in</option>
+                  </select>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="form-label font-bold text-xs">Mobile Number *</label>
+                  <input
+                    className="form-input text-sm"
+                    required
+                    type="tel"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={form.mobile}
+                    onChange={e => set('mobile', e.target.value.replace(/\D/g, ''))}
+                    placeholder="98765 43210"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="form-label font-bold text-xs">Alt Mobile</label>
+                  <input
+                    className="form-input text-sm"
+                    type="tel"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={form.altMobile}
+                    onChange={e => set('altMobile', e.target.value.replace(/\D/g, ''))}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Address & Location</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="form-label text-xs">Address</label>
+                  <input
+                    className="form-input text-sm"
+                    autoComplete="street-address"
+                    value={form.address}
+                    onChange={e => set('address', e.target.value)}
+                    placeholder="Door no, Street, Landmark"
+                  />
+                </div>
+                <div>
+                  <label className="form-label text-xs">City</label>
+                  <input
+                    className="form-input text-sm"
+                    autoComplete="address-level2"
+                    value={form.city}
+                    onChange={e => set('city', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label text-xs">State</label>
+                  <input
+                    className="form-input text-sm"
+                    autoComplete="address-level1"
+                    value={form.state}
+                    onChange={e => set('state', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Credit & GST</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label text-xs">GSTIN (Optional)</label>
+                  <input className="form-input text-sm uppercase font-mono" value={form.gstin} onChange={e => set('gstin', e.target.value)} placeholder="33AAAAA0000A1Z5" />
+                </div>
+                <div>
+                  <label className="form-label text-xs">Credit Limit (₹)</label>
+                  <input className="form-input text-sm" type="number" value={form.creditLimit} onChange={e => set('creditLimit', Number(e.target.value))} placeholder="0" />
+                </div>
+                {!customer && (
+                  <div>
+                    <label className="form-label text-xs">Opening Balance (₹)</label>
+                    <input className="form-input text-sm" type="number" value={form.openingBalance} onChange={e => set('openingBalance', Number(e.target.value))} placeholder="0" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label text-xs">Notes / Remarks</label>
+              <textarea rows={2} className="form-input text-xs" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Special delivery notes or credit terms" />
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1">
-              {loading ? 'Saving...' : customer ? 'Update Customer' : 'Save Customer'}
+          <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3 shrink-0">
+            <button type="button" onClick={onClose} className="btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer">Cancel</button>
+            <button type="submit" disabled={loading} className="btn-primary py-2.5 px-6 text-xs font-bold shadow-md cursor-pointer">
+              {loading ? 'Saving...' : customer ? 'Update Customer' : 'Create Customer'}
             </button>
           </div>
         </form>

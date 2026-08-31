@@ -84,19 +84,25 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto p-4 flex items-center justify-center backdrop-blur-xs" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-2xl w-full my-6 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
-            <h2 className="font-bold text-lg text-gray-900">{product ? 'Edit Product' : 'Add New Grocery Product'}</h2>
-            <p className="text-xs text-gray-500">Structured inventory data entry</p>
+            <h2 className="font-extrabold text-lg text-gray-900">{product ? 'Edit Product' : 'Add New Grocery Product'}</h2>
+            <p className="text-xs text-gray-500">Structured inventory data entry & pricing</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+            title="Close form"
+          >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} autoComplete="on" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
           {/* Section 1: Category & Basic Info */}
           <div>
             <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -310,13 +316,14 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
               </div>
             </div>
           </div>
+          </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 py-2.5">
+          {/* Modal Footer with Actions */}
+          <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3 shrink-0">
+            <button type="button" onClick={onClose} className="btn-secondary py-2.5 px-5 text-xs font-bold cursor-pointer">
               Cancel
             </button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1 py-2.5 font-bold gap-2">
+            <button type="submit" disabled={loading} className="btn-primary py-2.5 px-6 text-xs font-bold gap-2 shadow-md cursor-pointer">
               <CheckCircle size={16} />
               {loading ? 'Saving...' : product ? 'Update Product' : 'Add to Inventory'}
             </button>

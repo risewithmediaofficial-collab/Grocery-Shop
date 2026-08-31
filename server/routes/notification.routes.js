@@ -5,12 +5,18 @@ const { protect } = require('../middleware/auth');
 
 router.get('/', protect, async (req, res) => {
   try {
-    const notifications = await Notification.find({
-      $or: [{ forRoles: { $in: [req.user.role] } }, { forRoles: { $size: 0 } }]
-    }).sort({ createdAt: -1 }).limit(50);
+    const roleQuery = {
+      $or: [
+        { forRoles: { $in: [req.user.role] } },
+        { forRoles: { $size: 0 } },
+        { forRoles: { $exists: false } },
+        { forRoles: null }
+      ]
+    };
+    const notifications = await Notification.find(roleQuery).sort({ createdAt: -1 }).limit(50);
     const unreadCount = await Notification.countDocuments({
       isRead: false,
-      $or: [{ forRoles: { $in: [req.user.role] } }, { forRoles: { $size: 0 } }]
+      ...roleQuery
     });
     res.json({ success: true, data: notifications, unreadCount });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
