@@ -37,7 +37,7 @@ router.get('/:id', protect, async (req, res) => {
 });
 
 // POST /api/purchases — Receive a purchase
-router.post('/', protect, authorize('admin', 'manager', 'stock_manager'), async (req, res) => {
+router.post('/', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const { supplierId, items, grandTotal, invoiceNumber, notes, paymentStatus, amountPaid } = req.body;
 

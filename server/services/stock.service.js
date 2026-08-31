@@ -116,7 +116,7 @@ async function checkStockAlerts(product) {
       severity: 'error',
       relatedId: product._id,
       relatedModel: 'Product',
-      forRoles: ['admin', 'manager', 'stock_manager'],
+      forRoles: ['admin', 'manager', 'cashier'],
     });
   } else if (product.reorderLevel > 0 && product.currentStock <= product.reorderLevel) {
     await Notification.create({
@@ -126,7 +126,7 @@ async function checkStockAlerts(product) {
       severity: 'warning',
       relatedId: product._id,
       relatedModel: 'Product',
-      forRoles: ['admin', 'manager', 'stock_manager'],
+      forRoles: ['admin', 'manager', 'cashier'],
     });
   }
 }

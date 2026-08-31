@@ -1,16 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Warehouse, Plus, Search, Filter, AlertTriangle, ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Warehouse, Plus, Search, Filter, AlertTriangle, ArrowDown,
+  ArrowUp, RefreshCw, Layers, CheckCircle, Package, Tag
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
 
-function StockAdjustmentModal({ products, onSave, onClose }) {
+const CATEGORY_ICONS = {
+  'food': '🍚',
+  'beverages': '🥤',
+  'snacks': '🍿',
+  'household': '🧼',
+  'personal care': '🧴',
+};
+
+function StockAdjustmentModal({ products, categories, defaultCategory = 'all', onSave, onClose }) {
+  const [selectedCat, setSelectedCat] = useState(defaultCategory);
   const [productId, setProductId] = useState('');
   const [adjustedQty, setAdjustedQty] = useState('');
   const [type, setType] = useState('correction');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const filteredProducts = useMemo(() => {
+    if (selectedCat === 'all') return products;
+    return products.filter(p => (p.category?._id || p.category) === selectedCat);
+  }, [products, selectedCat]);
 
   const selectedProduct = products.find(p => p._id === productId);
 
@@ -39,73 +56,106 @@ function StockAdjustmentModal({ products, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
           <div>
-            <h3 className="font-bold text-lg text-gray-900">Adjust Stock (Admin/Manager)</h3>
-            <p className="text-xs text-gray-500">Changes are permanently logged to audit history</p>
+            <h3 className="font-bold text-lg text-gray-900">Adjust Stock</h3>
+            <p className="text-xs text-gray-500">Changes are logged permanently to the audit ledger</p>
           </div>
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Category Filter for Quick Selection */}
           <div>
-            <label className="form-label">Select Product *</label>
-            <select className="form-select" required value={productId} onChange={e => setProductId(e.target.value)}>
-              <option value="">Choose product...</option>
-              {products.map(p => <option key={p._id} value={p._id}>{p.name} (Current: {p.currentStock})</option>)}
+            <label className="form-label text-xs font-bold">Category</label>
+            <select
+              className="form-select text-xs"
+              value={selectedCat}
+              onChange={e => {
+                setSelectedCat(e.target.value);
+                setProductId('');
+              }}
+            >
+              <option value="all">-- All Categories --</option>
+              {categories.map(c => (
+                <option key={c._id} value={c._id}>
+                  {CATEGORY_ICONS[c.name.toLowerCase()] || '📦'} {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label text-xs font-bold">Select Product *</label>
+            <select
+              className="form-select font-semibold text-sm"
+              required
+              value={productId}
+              onChange={e => setProductId(e.target.value)}
+            >
+              <option value="">-- Choose Product ({filteredProducts.length} items) --</option>
+              {filteredProducts.map(p => (
+                <option key={p._id} value={p._id}>
+                  {p.name} (Current Stock: {p.currentStock} {p.unit?.symbol || ''})
+                </option>
+              ))}
             </select>
           </div>
 
           {selectedProduct && (
-            <div className="p-3 bg-gray-50 rounded-lg text-xs flex justify-between border border-gray-200">
-              <span className="text-gray-600">Current Stock Balance:</span>
-              <span className="font-bold text-gray-900">{selectedProduct.currentStock}</span>
+            <div className="p-3 bg-primary-50/50 rounded-xl text-xs flex justify-between border border-primary-200">
+              <span className="text-primary-800 font-medium">Current Stock Balance:</span>
+              <span className="font-extrabold text-primary-900">
+                {selectedProduct.currentStock} {selectedProduct.unit?.symbol || 'units'}
+              </span>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="form-label">Adjustment Qty *</label>
+              <label className="form-label text-xs font-bold">Adjustment Qty *</label>
               <input
                 type="number"
                 required
-                className="form-input font-bold"
+                className="form-input font-extrabold text-sm"
                 placeholder="e.g. -2 or +5"
                 value={adjustedQty}
                 onChange={e => setAdjustedQty(e.target.value)}
               />
-              <span className="text-[10px] text-gray-400">Use negative (-) for reductions</span>
+              <span className="text-[10px] text-gray-400">Negative (-) to reduce</span>
             </div>
             <div>
-              <label className="form-label">Type</label>
-              <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
+              <label className="form-label text-xs font-bold">Type</label>
+              <select className="form-select text-xs" value={type} onChange={e => setType(e.target.value)}>
+                <option value="correction">Audit Correction</option>
                 <option value="damage">Damaged Goods</option>
                 <option value="expiry">Expired Stock</option>
                 <option value="theft">Lost / Theft</option>
-                <option value="correction">Audit Count Correction</option>
                 <option value="other">Other</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="form-label">Reason * (Mandatory for audit)</label>
+            <label className="form-label text-xs font-bold">Reason * (Mandatory for audit)</label>
             <textarea
               required
               rows={2}
               className="form-input text-xs"
-              placeholder="Provide clear rationale for this stock change..."
+              placeholder="e.g. Physical inventory verification discrepancy"
               value={reason}
               onChange={e => setReason(e.target.value)}
             />
           </div>
 
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1">
-              {loading ? 'Adjusting...' : 'Save Stock Adjustment'}
+          <div className="flex gap-2 pt-2 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">
+              Cancel
+            </button>
+            <button type="submit" disabled={loading} className="btn-primary flex-1 font-bold">
+              {loading ? 'Adjusting...' : 'Save Adjustment'}
             </button>
           </div>
         </form>
@@ -115,15 +165,28 @@ function StockAdjustmentModal({ products, onSave, onClose }) {
 }
 
 export default function InventoryPage() {
-  const { isAdmin, isManager } = useAuth();
+  const { isAdmin } = useAuth();
   const [movements, setMovements] = useState([]);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState('all');
   const [typeFilter, setTypeFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+
+  // Load Categories & Products
+  useEffect(() => {
+    Promise.all([
+      api.get('/categories/categories'),
+      api.get('/products?limit=200'),
+    ]).then(([catRes, prodRes]) => {
+      setCategories(catRes.data.data || []);
+      setProducts(prodRes.data.data || []);
+    }).catch(console.error);
+  }, []);
 
   const fetchMovements = useCallback(async () => {
     setLoading(true);
@@ -143,9 +206,43 @@ export default function InventoryPage() {
 
   useEffect(() => { fetchMovements(); }, [fetchMovements]);
 
-  useEffect(() => {
-    api.get('/products?limit=200').then(res => setProducts(res.data.data || []));
-  }, []);
+  // Structured Tabs: All Items, Food, Beverages, Snacks, Household
+  const structuredTabs = useMemo(() => {
+    const defaultOrder = ['food', 'beverages', 'snacks', 'household'];
+    const sortedCats = [...categories].sort((a, b) => {
+      const idxA = defaultOrder.indexOf(a.name.toLowerCase());
+      const idxB = defaultOrder.indexOf(b.name.toLowerCase());
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return [
+      { id: 'all', name: 'All Items', icon: '🛍️' },
+      ...sortedCats.map(c => ({
+        id: c._id,
+        name: c.name,
+        icon: CATEGORY_ICONS[c.name.toLowerCase()] || '📦',
+      }))
+    ];
+  }, [categories]);
+
+  // Products filtered by currently active category tab
+  const productsInCategory = useMemo(() => {
+    if (selectedCategoryTab === 'all') return products;
+    return products.filter(p => (p.category?._id || p.category) === selectedCategoryTab);
+  }, [products, selectedCategoryTab]);
+
+  // Category Stock Stats
+  const categoryStats = useMemo(() => {
+    const totalQty = productsInCategory.reduce((sum, p) => sum + (p.currentStock || 0), 0);
+    const totalVal = productsInCategory.reduce((sum, p) => sum + ((p.currentStock || 0) * (p.purchasePrice || 0)), 0);
+    const lowStockCount = productsInCategory.filter(p => p.currentStock <= p.reorderLevel && p.currentStock > 0).length;
+    const outOfStockCount = productsInCategory.filter(p => p.currentStock === 0).length;
+
+    return { totalQty, totalVal, lowStockCount, outOfStockCount };
+  }, [productsInCategory]);
 
   const typeBadge = (type) => {
     const map = {
@@ -162,32 +259,98 @@ export default function InventoryPage() {
   };
 
   return (
-    <div className="page-container">
-      <div className="flex items-center justify-between">
+    <div className="page-container max-w-7xl mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Stock Ledger & Movements</h1>
-          <p className="page-subtitle">{total} stock movement audit records · Complete trace from purchase to sale</p>
+          <h1 className="page-title">Stock Ledger & Inventory Management</h1>
+          <p className="page-subtitle">Real-time stock ledger, audits, and category-level inventory control</p>
         </div>
-        {(isAdmin() || isManager()) && (
-          <button className="btn-primary" onClick={() => setShowAdjustModal(true)}>
-            <Plus size={16} /> Adjust Stock
-          </button>
-        )}
+        <button
+          className="btn-primary gap-1.5 shadow-sm"
+          onClick={() => setShowAdjustModal(true)}
+        >
+          <Plus size={16} /> Adjust Stock
+        </button>
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+      {/* Structured Category Navigation Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide border-b border-gray-200">
+        {structuredTabs.map(tab => {
+          const isActive = selectedCategoryTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setSelectedCategoryTab(tab.id);
+                setProductFilter('');
+                setPage(1);
+              }}
+              className={clsx(
+                'px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 whitespace-nowrap transition-all duration-150 border cursor-pointer',
+                isActive
+                  ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
+                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              )}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.name}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Category Stock Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="card p-4 border-l-4 border-l-primary-500">
+          <p className="text-xs text-gray-500 font-medium">Products in Category</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{productsInCategory.length} SKUs</p>
+        </div>
+
+        <div className="card p-4 border-l-4 border-l-blue-500">
+          <p className="text-xs text-gray-500 font-medium">Total Stock Quantity</p>
+          <p className="text-xl font-bold text-blue-700 mt-1">{categoryStats.totalQty} units</p>
+        </div>
+
+        <div className="card p-4 border-l-4 border-l-emerald-500">
+          <p className="text-xs text-gray-500 font-medium">Inventory Valuation</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">₹{categoryStats.totalVal.toLocaleString('en-IN')}</p>
+        </div>
+
+        <div className="card p-4 border-l-4 border-l-amber-500">
+          <p className="text-xs text-gray-500 font-medium">Low / Out of Stock</p>
+          <p className="text-xl font-bold text-amber-700 mt-1">
+            {categoryStats.lowStockCount + categoryStats.outOfStockCount} items
+          </p>
+        </div>
+      </div>
+
+      {/* Filter Ledger Bar */}
+      <div className="card p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full sm:max-w-xl">
           <div>
-            <label className="form-label text-xs">Filter by Product</label>
-            <select className="form-select" value={productFilter} onChange={e => { setProductFilter(e.target.value); setPage(1); }}>
-              <option value="">All Products</option>
-              {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+            <label className="form-label text-xs font-bold">Filter by Product</label>
+            <select
+              className="form-select text-xs"
+              value={productFilter}
+              onChange={e => { setProductFilter(e.target.value); setPage(1); }}
+            >
+              <option value="">All Products in Tab ({productsInCategory.length})</option>
+              {productsInCategory.map(p => (
+                <option key={p._id} value={p._id}>
+                  {p.name} (Stock: {p.currentStock})
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
-            <label className="form-label text-xs">Filter by Movement Type</label>
-            <select className="form-select" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(1); }}>
+            <label className="form-label text-xs font-bold">Movement Type</label>
+            <select
+              className="form-select text-xs"
+              value={typeFilter}
+              onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
+            >
               <option value="">All Movement Types</option>
               <option value="purchase">Purchases (In)</option>
               <option value="sale">Sales (Out)</option>
@@ -198,10 +361,18 @@ export default function InventoryPage() {
             </select>
           </div>
         </div>
+
+        <button
+          onClick={fetchMovements}
+          className="btn-outline btn-sm gap-1.5 text-xs self-end sm:self-center"
+          title="Refresh Ledger"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
       </div>
 
       {/* Stock Ledger Table */}
-      <div className="card">
+      <div className="card overflow-hidden">
         <div className="table-container">
           <table className="table">
             <thead>
@@ -213,63 +384,88 @@ export default function InventoryPage() {
                 <th>Balance Before</th>
                 <th>Balance After</th>
                 <th>Reference #</th>
-                <th>Reason / User</th>
+                <th>Reason / Staff</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                Array(6).fill(0).map((_, i) => <tr key={i}><td colSpan={8}><div className="skeleton h-5 w-full" /></td></tr>)
+                Array(6).fill(0).map((_, i) => (
+                  <tr key={i}><td colSpan={8}><div className="skeleton h-6 w-full" /></td></tr>
+                ))
               ) : movements.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-gray-400">
-                    <Warehouse size={32} className="mx-auto mb-2 opacity-40" />
-                    No stock movements found
+                  <td colSpan={8} className="text-center py-12 text-gray-400">
+                    <Warehouse size={36} className="mx-auto mb-2 opacity-40 text-gray-300" />
+                    <p className="font-semibold text-gray-600">No stock movement records found</p>
                   </td>
                 </tr>
               ) : movements.map(m => (
                 <tr key={m._id}>
-                  <td className="text-xs text-gray-600">
-                    {new Date(m.createdAt).toLocaleDateString('en-IN')}{' '}
-                    <span className="text-gray-400">{new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <td className="text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(m.createdAt).toLocaleDateString('en-IN', {
+                      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                    })}
                   </td>
                   <td>
                     <p className="font-semibold text-gray-900 text-sm">{m.productName || m.product?.name}</p>
-                    <p className="text-xs text-gray-400">{m.productId || m.product?.productId}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">{m.productId}</p>
                   </td>
                   <td>{typeBadge(m.type)}</td>
                   <td>
-                    <span className={clsx('font-bold text-sm', m.quantity > 0 ? 'text-green-600' : 'text-red-600')}>
-                      {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                    <span className={clsx(
+                      'font-extrabold text-sm flex items-center gap-0.5',
+                      m.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                    )}>
+                      {m.quantity > 0 ? '+' : ''}{m.quantity}
                     </span>
                   </td>
-                  <td className="text-gray-500 font-medium">{m.balanceBefore}</td>
-                  <td className="font-extrabold text-gray-900">{m.balanceAfter}</td>
-                  <td className="text-xs font-mono text-gray-600">{m.reference || '-'}</td>
-                  <td className="text-xs text-gray-500">
-                    {m.reason && <p className="font-medium text-gray-700">{m.reason}</p>}
-                    {m.createdBy?.name && <p className="text-[10px] text-gray-400">By: {m.createdBy.name}</p>}
-                  </td>
+                  <td className="text-gray-500 font-mono text-xs">{m.balanceBefore}</td>
+                  <td className="font-bold text-gray-900 font-mono text-sm">{m.balanceAfter}</td>
+                  <td className="font-mono text-xs text-gray-500">{m.referenceNumber || '-'}</td>
+                  <td className="text-xs text-gray-600 max-w-xs truncate">{m.reason || '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
+        {/* Pagination */}
         {total > 30 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-            <p className="text-sm text-gray-500">Showing {Math.min((page-1)*30+1, total)}–{Math.min(page*30, total)} of {total}</p>
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 bg-gray-50/50">
+            <p className="text-xs text-gray-500">
+              Showing {Math.min((page - 1) * 30 + 1, total)}–{Math.min(page * 30, total)} of {total} records
+            </p>
             <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1} className="btn-secondary btn-sm">Previous</button>
-              <button onClick={() => setPage(p => p+1)} disabled={page*30 >= total} className="btn-secondary btn-sm">Next</button>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="btn-secondary btn-sm"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page * 30 >= total}
+                className="btn-secondary btn-sm"
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
       </div>
 
+      {/* Stock Adjustment Modal */}
       {showAdjustModal && (
         <StockAdjustmentModal
           products={products}
-          onSave={() => { setShowAdjustModal(false); fetchMovements(); }}
+          categories={categories}
+          defaultCategory={selectedCategoryTab}
+          onSave={() => {
+            setShowAdjustModal(false);
+            fetchMovements();
+            api.get('/products?limit=200').then(res => setProducts(res.data.data || []));
+          }}
           onClose={() => setShowAdjustModal(false)}
         />
       )}

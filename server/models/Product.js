@@ -45,8 +45,6 @@ productSchema.pre('save', async function () {
   }
 });
 
-productSchema.index({ barcode: 1 });
-productSchema.index({ sku: 1 });
 productSchema.index({ name: 'text' });
 productSchema.index({ category: 1 });
 productSchema.index({ currentStock: 1 });

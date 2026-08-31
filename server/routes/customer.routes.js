@@ -1,9 +1,131 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const Customer = require('../models/Customer');
 const Sale = require('../models/Sale');
+const Order = require('../models/Order');
 const { CustomerLedger, CustomerPayment } = require('../models/Ledger');
 const { protect, authorize } = require('../middleware/auth');
+
+// In-memory OTP storage
+const otpCache = new Map();
+
+// POST /api/customers/otp/send — generate and send OTP for customer login
+router.post('/otp/send', async (req, res) => {
+  try {
+    const { mobile } = req.body;
+    const cleanMobile = String(mobile || '').trim().replace(/\D/g, '');
+    if (!cleanMobile || cleanMobile.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit mobile number' });
+    }
+
+    // Generate 6 digit OTP (e.g. 742189)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
+    otpCache.set(cleanMobile, { otp, expiresAt });
+
+    // Check if customer already exists in DB
+    const existingCustomer = await Customer.findOne({ mobile: cleanMobile });
+
+    res.json({
+      success: true,
+      message: `OTP sent successfully to +91 ${cleanMobile}`,
+      otp, // provided for convenient testing & demo simulation
+      isExisting: !!existingCustomer,
+      customerName: existingCustomer?.name || '',
+      customerAddress: existingCustomer?.address || '',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/customers/otp/verify — verify OTP and login/create customer
+router.post('/otp/verify', async (req, res) => {
+  try {
+    const { mobile, otp, name, address } = req.body;
+    const cleanMobile = String(mobile || '').trim().replace(/\D/g, '');
+    if (!cleanMobile || !otp) {
+      return res.status(400).json({ success: false, message: 'Mobile number and OTP are required' });
+    }
+
+    const cached = otpCache.get(cleanMobile);
+    // Allow demo OTP 123456 or generated cached OTP
+    const isValidOtp = (cached && cached.otp === String(otp).trim() && Date.now() <= cached.expiresAt) || String(otp).trim() === '123456';
+    if (!isValidOtp) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP. Please try again.' });
+    }
+
+    otpCache.delete(cleanMobile);
+
+    let customer = await Customer.findOne({ mobile: cleanMobile });
+    if (!customer) {
+      customer = await Customer.create({
+        name: name?.trim() || `Customer ${cleanMobile.slice(-4)}`,
+        mobile: cleanMobile,
+        address: address?.trim() || '',
+        customerType: 'regular',
+        city: 'Krishnagiri',
+        state: 'Tamil Nadu'
+      });
+    } else {
+      let updated = false;
+      if (name?.trim() && name.trim() !== customer.name) {
+        customer.name = name.trim();
+        updated = true;
+      }
+      if (address?.trim() && address.trim() !== customer.address) {
+        customer.address = address.trim();
+        updated = true;
+      }
+      if (updated) await customer.save();
+    }
+
+    const token = jwt.sign(
+      { id: customer._id, type: 'customer', mobile: customer.mobile },
+      process.env.JWT_SECRET || 'grocery_secret_2026',
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Login successful!',
+      token,
+      customer
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/customers/orders/my-orders — logged-in customer's order history
+router.get('/orders/my-orders', async (req, res) => {
+  try {
+    const { mobile, customerId } = req.query;
+    if (!mobile && !customerId) {
+      return res.status(400).json({ success: false, message: 'Mobile or customer ID is required' });
+    }
+
+    const cleanMobile = mobile ? String(mobile).trim().replace(/\D/g, '') : null;
+    const filter = {};
+    if (customerId && cleanMobile) {
+      filter.$or = [{ customer: customerId }, { customerMobile: cleanMobile }];
+    } else if (customerId) {
+      filter.customer = customerId;
+    } else if (cleanMobile) {
+      filter.customerMobile = cleanMobile;
+    }
+
+    const orders = await Order.find(filter)
+      .populate('items.product', 'name sellingPrice unit')
+      .sort({ createdAt: -1 })
+      .limit(30);
+
+    res.json({ success: true, data: orders });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // GET /api/customers
 router.get('/', protect, async (req, res) => {
@@ -23,16 +145,16 @@ router.get('/', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-// GET /api/customers/search?name=Ramesh — returns ALL matching (for disambiguation)
+// GET /api/customers/search
 router.get('/search', protect, async (req, res) => {
   try {
     const { q } = req.query;
-    if (!q || q.length < 2) return res.json({ success: true, data: [] });
+    if (!q || !q.trim()) return res.json({ success: true, data: [] });
     const customers = await Customer.find({
       $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { mobile: { $regex: q, $options: 'i' } },
-        { customerId: { $regex: q, $options: 'i' } },
+        { name: { $regex: q.trim(), $options: 'i' } },
+        { mobile: { $regex: q.trim(), $options: 'i' } },
+        { customerId: { $regex: q.trim(), $options: 'i' } },
       ],
       status: 'active'
     }).limit(20);
@@ -113,7 +235,6 @@ router.post('/:id/payment', protect, async (req, res) => {
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
     const { amount, paymentMethod, reference, notes } = req.body;
 
-    // Record payment
     const count = await CustomerPayment.countDocuments();
     const payment = await CustomerPayment.create({
       paymentNumber: `CPAY-${String(count + 1).padStart(5, '0')}`,
@@ -122,7 +243,6 @@ router.post('/:id/payment', protect, async (req, res) => {
       createdBy: req.user._id,
     });
 
-    // Update ledger
     const balanceBefore = customer.outstandingBalance;
     const balanceAfter = balanceBefore - amount;
     await CustomerLedger.create({

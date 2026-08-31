@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: 'admin@kolambu.com', password: 'admin123' });
+  const [form, setForm] = useState({ email: 'admin@columbu.com', password: 'admin123' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -33,7 +33,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-500 rounded-2xl mb-4 shadow-lg">
             <Store size={32} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">New Kolambu Stores</h1>
+          <h1 className="text-2xl font-bold text-white">New Columbu Stores</h1>
           <p className="text-gray-400 text-sm mt-1">Krishnagiri, Tamil Nadu</p>
         </div>
 
@@ -50,7 +50,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   className="form-input pl-10"
-                  placeholder="admin@kolambu.com"
+                  placeholder="admin@columbu.com"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   required
@@ -94,8 +94,8 @@ export default function LoginPage() {
           <div className="mt-6 pt-5 border-t border-gray-100">
             <p className="text-xs text-gray-500 mb-2 font-medium">Demo Accounts:</p>
             {[
-              { role: 'Admin', email: 'admin@kolambu.com', password: 'admin123' },
-              { role: 'Cashier', email: 'cashier@kolambu.com', password: 'cashier123' },
+              { role: 'Admin', email: 'admin@columbu.com', password: 'admin123' },
+              { role: 'Cashier', email: 'cashier@columbu.com', password: 'cashier123' },
             ].map(acc => (
               <button
                 key={acc.role}

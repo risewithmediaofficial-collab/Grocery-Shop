@@ -7,6 +7,7 @@ const { CustomerLedger } = require('../models/Ledger');
 const { Setting } = require('../models/System');
 const stockService = require('../services/stock.service');
 const auditService = require('../services/audit.service');
+const whatsappService = require('../services/whatsapp.service');
 const { protect } = require('../middleware/auth');
 
 /**
@@ -213,6 +214,9 @@ router.post('/', protect, async (req, res) => {
     }
 
     await auditService.log({ user: req.user, action: 'sale_created', module: 'sales', recordId: sale._id, recordRef: invoiceNumber, newValue: { total: grandTotal, items: saleItems.length } });
+
+    // Automatically send digital invoice receipt via WhatsApp
+    whatsappService.sendSaleInvoiceAutoMessage(sale).catch(e => console.error('WhatsApp invoice error:', e));
 
     res.status(201).json({ success: true, data: sale, message: 'Sale completed successfully' });
   } catch (err) {

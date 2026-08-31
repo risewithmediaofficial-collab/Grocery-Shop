@@ -25,8 +25,17 @@ router.put('/:id/read', protect, async (req, res) => {
 
 router.put('/mark-all-read', protect, async (req, res) => {
   try {
-    await Notification.updateMany({ forRoles: { $in: [req.user.role] } }, { isRead: true });
+    await Notification.updateMany({
+      $or: [{ forRoles: { $in: [req.user.role] } }, { forRoles: { $size: 0 } }, { forRoles: { $exists: false } }]
+    }, { isRead: true });
     res.json({ success: true, message: 'All marked as read' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    await Notification.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Notification deleted' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 

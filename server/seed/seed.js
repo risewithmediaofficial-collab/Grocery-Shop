@@ -12,7 +12,7 @@ const Purchase = require('../models/Purchase');
 const { Setting } = require('../models/System');
 const { StockMovement } = require('../models/Inventory');
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/kolambu_stores';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/columbu_stores';
 
 async function seed() {
   await mongoose.connect(MONGO_URI);
@@ -45,17 +45,16 @@ async function seed() {
   ]);
   const [AASH, TATA, FORT, SUND, BRIT, PARL, HALD, DABR, LIFB, SURF, LOCAL] = brands;
 
-  // Categories & Subcategories
-  const catFood = await Category.create({ name: 'Food', slug: 'food' });
-  const catSnacks = await Category.create({ name: 'Snacks', slug: 'snacks' });
-  const catBev = await Category.create({ name: 'Beverages', slug: 'beverages' });
-  const catHH = await Category.create({ name: 'Household', slug: 'household' });
-  const catPers = await Category.create({ name: 'Personal Care', slug: 'personal-care' });
+  // Categories & Subcategories (Structured Categories)
+  const catFood = await Category.create({ name: 'Food', slug: 'food', description: 'Grains, Dal, Flour, Oil, Spices, Sugar, Salt' });
+  const catBev = await Category.create({ name: 'Beverages', slug: 'beverages', description: 'Juices, Water, Cold Drinks, Beverages' });
+  const catSnacks = await Category.create({ name: 'Snacks', slug: 'snacks', description: 'Biscuits, Chips, Cookies, Namkeen' });
+  const catHH = await Category.create({ name: 'Household', slug: 'household', description: 'Soaps, Detergents, Cleaners, Personal Essentials' });
 
-  const subRice = await SubCategory.create({ name: 'Rice', category: catFood._id });
+  const subRice = await SubCategory.create({ name: 'Rice & Grains', category: catFood._id });
   const subDal = await SubCategory.create({ name: 'Dal & Pulses', category: catFood._id });
-  const subFlour = await SubCategory.create({ name: 'Flour & Grains', category: catFood._id });
-  const subOil = await SubCategory.create({ name: 'Oil & Ghee', category: catFood._id });
+  const subFlour = await SubCategory.create({ name: 'Flour & Atta', category: catFood._id });
+  const subOil = await SubCategory.create({ name: 'Cooking Oil & Ghee', category: catFood._id });
   const subSpice = await SubCategory.create({ name: 'Spices & Masala', category: catFood._id });
   const subSugar = await SubCategory.create({ name: 'Sugar & Salt', category: catFood._id });
   const subBisc = await SubCategory.create({ name: 'Biscuits', category: catSnacks._id });
@@ -117,13 +116,12 @@ async function seed() {
   ]);
 
   // Users
-  await User.create({ name: 'Admin User', email: 'admin@kolambu.com', password: 'admin123', role: 'admin', mobile: '9000000000' });
-  await User.create({ name: 'Cashier', email: 'cashier@kolambu.com', password: 'cashier123', role: 'cashier', mobile: '9000000001' });
-  await User.create({ name: 'Stock Manager', email: 'stock@kolambu.com', password: 'stock123', role: 'stock_manager', mobile: '9000000002' });
+  await User.create({ name: 'Admin User', email: 'admin@columbu.com', password: 'admin123', role: 'admin', mobile: '9000000000' });
+  await User.create({ name: 'Cashier', email: 'cashier@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000001' });
 
   // Shop Settings
   await Setting.create({ key: 'shop', value: {
-    name: 'New Kolambu Stores',
+    name: 'New Columbu Stores',
     address: 'Main Road, Krishnagiri, Tamil Nadu - 635001',
     mobile: '9876543200',
     gstin: '33AABCK1234A1Z5',
@@ -177,9 +175,8 @@ async function seed() {
 
   console.log('Seed data created successfully!');
   console.log('\nLogin credentials:');
-  console.log('  Admin:   admin@kolambu.com / admin123');
-  console.log('  Cashier: cashier@kolambu.com / cashier123');
-  console.log('  Stock:   stock@kolambu.com / stock123');
+  console.log('  Admin:   admin@columbu.com / admin123');
+  console.log('  Cashier: cashier@columbu.com / cashier123');
   process.exit(0);
 }
 

@@ -116,7 +116,7 @@ export default function SaleDetailPage() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Store size={24} className="text-primary-600" />
-                <h2 className="text-2xl font-black tracking-tight text-gray-900">NEW KOLAMBU STORES</h2>
+                <h2 className="text-2xl font-black tracking-tight text-gray-900">NEW COLUMBU STORES</h2>
               </div>
               <p className="text-xs text-gray-600">Main Road, Krishnagiri, Tamil Nadu - 635001</p>
               <p className="text-xs text-gray-600 font-medium">GSTIN: <span className="font-bold text-gray-900">33AABCK1234A1Z5</span> | State: Tamil Nadu (Code: 33)</p>
@@ -198,7 +198,7 @@ export default function SaleDetailPage() {
             <p className="font-semibold text-gray-700">Terms & Conditions:</p>
             <p>1. Goods once sold will not be exchanged or returned without receipt.</p>
             <p>2. Subject to Krishnagiri jurisdiction only.</p>
-            <p className="pt-2 text-primary-800 font-semibold italic">Thank you for shopping at New Kolambu Stores!</p>
+            <p className="pt-2 text-primary-800 font-semibold italic">Thank you for shopping at New Columbu Stores!</p>
           </div>
 
           <div className="w-64 space-y-1.5 text-right">

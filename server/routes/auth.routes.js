@@ -9,14 +9,26 @@ const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expires
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, message: 'Email and password are required' });
 
-    const user = await User.findOne({ email });
-    if (!user || !user.isActive) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    email = String(email).trim().toLowerCase();
+    const altEmail = email.includes('kolambu.com')
+      ? email.replace('kolambu.com', 'columbu.com')
+      : email.replace('columbu.com', 'kolambu.com');
+
+    const user = await User.findOne({
+      $or: [{ email }, { email: altEmail }]
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password. Use admin@columbu.com / admin123' });
+    }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password. Use admin@columbu.com / admin123' });
+    }
 
     user.lastLogin = new Date();
     await user.save();

@@ -58,10 +58,12 @@ app.use('/api/settings',        require('./routes/setting.routes'));
 app.use('/api/dashboard',       require('./routes/dashboard.routes'));
 // ORDER ROUTES — Active & Ready for Ordering System
 app.use('/api/orders',       require('./routes/order.routes'));
+app.use('/api/held-bills',    require('./routes/heldBill.routes'));
+app.use('/api/whatsapp',      require('./routes/whatsapp.routes'));
 
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'New Kolambu Stores API is running', timestamp: new Date() });
+  res.json({ success: true, message: 'New Columbu Stores API is running', timestamp: new Date() });
 });
 
 // 404 Handler
@@ -82,7 +84,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`\n🛒 New Kolambu Stores API`);
+  console.log(`\n🛒 New Columbu Stores API`);
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`📦 MongoDB: Connected\n`);

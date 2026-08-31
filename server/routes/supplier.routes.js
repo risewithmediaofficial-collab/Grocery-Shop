@@ -31,14 +31,14 @@ router.get('/:id/ledger', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/', protect, authorize('admin', 'manager'), async (req, res) => {
+router.post('/', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const supplier = await Supplier.create(req.body);
     res.status(201).json({ success: true, data: supplier, message: 'Supplier created successfully' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.put('/:id', protect, authorize('admin', 'manager'), async (req, res) => {
+router.put('/:id', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });

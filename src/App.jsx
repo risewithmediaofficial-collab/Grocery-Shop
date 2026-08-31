@@ -27,8 +27,9 @@ import SettingsPage from './pages/settings/SettingsPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import AuditLogPage from './pages/audit/AuditLogPage';
 
-// ORDERS_HELD — uncomment when activating customer ordering
+// ORDERS & CUSTOMER ORDERING
 import OrdersPage from './pages/orders/OrdersPage';
+import CustomerOrderPage from './pages/customer/CustomerOrderPage';
 
 function PrivateRoute({ children, roles }) {
   const { user, loading } = useAuth();
@@ -44,6 +45,10 @@ export default function App() {
       <CartProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Public Customer Grocery Ordering Pages */}
+          <Route path="/order" element={<CustomerOrderPage />} />
+          <Route path="/customer" element={<CustomerOrderPage />} />
+          <Route path="/shop" element={<CustomerOrderPage />} />
           <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />

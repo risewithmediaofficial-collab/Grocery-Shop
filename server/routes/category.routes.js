@@ -10,7 +10,7 @@ router.get('/categories', protect, async (req, res) => {
     res.json({ success: true, data: categories });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-router.post('/categories', protect, authorize('admin', 'manager'), async (req, res) => {
+router.post('/categories', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const { name, description } = req.body;
     const slug = name.toLowerCase().replace(/\s+/g, '-');
@@ -18,7 +18,7 @@ router.post('/categories', protect, authorize('admin', 'manager'), async (req, r
     res.status(201).json({ success: true, data: cat });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-router.put('/categories/:id', protect, authorize('admin', 'manager'), async (req, res) => {
+router.put('/categories/:id', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const cat = await Category.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json({ success: true, data: cat });
@@ -41,7 +41,7 @@ router.get('/subcategories', protect, async (req, res) => {
     res.json({ success: true, data: subs });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-router.post('/subcategories', protect, authorize('admin', 'manager'), async (req, res) => {
+router.post('/subcategories', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const sub = await SubCategory.create(req.body);
     res.status(201).json({ success: true, data: sub });
@@ -55,7 +55,7 @@ router.get('/brands', protect, async (req, res) => {
     res.json({ success: true, data: brands });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-router.post('/brands', protect, authorize('admin', 'manager'), async (req, res) => {
+router.post('/brands', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const brand = await Brand.create(req.body);
     res.status(201).json({ success: true, data: brand });
@@ -69,7 +69,7 @@ router.get('/units', protect, async (req, res) => {
     res.json({ success: true, data: units });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-router.post('/units', protect, authorize('admin', 'manager'), async (req, res) => {
+router.post('/units', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
     const unit = await Unit.create(req.body);
     res.status(201).json({ success: true, data: unit });

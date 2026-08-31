@@ -5,10 +5,9 @@ import api from '../../services/api';
 import clsx from 'clsx';
 
 const ROLES = [
-  { value: 'admin', label: '👑 Admin / Store Owner', desc: 'Full unrestricted access to all modules, financial reports, & settings' },
+  { value: 'admin', label: '👑 Admin / Store Owner', desc: 'Full unrestricted access to all modules, financial reports, user management, settings, & inventory' },
   { value: 'manager', label: '👔 Store Manager', desc: 'Can manage sales, purchases, inventory, suppliers, & view reports' },
-  { value: 'cashier', label: '💻 Cashier / POS Billing', desc: 'POS Billing, customer lookups, receipts, & payments only' },
-  { value: 'stock_manager', label: '📦 Stock & Warehouse Manager', desc: 'Inventory inward, adjustments, batches, and expiry management' },
+  { value: 'cashier', label: '💻 Cashier & Store Staff', desc: 'POS Billing, customer lookups, receipts, purchase inward, product catalog, & stock management' },
 ];
 
 function UserModal({ user, onSave, onClose }) {
@@ -52,7 +51,7 @@ function UserModal({ user, onSave, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="form-label">Email Address *</label>
-              <input className="form-input" type="email" required value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@kolambu.com" />
+              <input className="form-input" type="email" required value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@columbu.com" />
             </div>
             <div>
               <label className="form-label">Mobile Number</label>
@@ -176,8 +175,7 @@ export default function UsersPage() {
                     <span className={clsx(
                       u.role === 'admin' && 'badge-purple font-bold',
                       u.role === 'manager' && 'badge-blue font-bold',
-                      u.role === 'cashier' && 'badge-green font-bold',
-                      u.role === 'stock_manager' && 'badge-orange font-bold'
+                      u.role === 'cashier' && 'badge-green font-bold'
                     )}>
                       {u.role?.replace('_', ' ')}
                     </span>

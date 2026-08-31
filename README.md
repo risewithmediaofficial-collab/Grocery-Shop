@@ -1,6 +1,6 @@
-# New Kolambu Stores — Grocery Management System
+# New Columbu Stores — Grocery Management System
 
-Complete, production-quality Grocery Shop Inventory, Stock, Purchase, Order & Billing Management System built for **New Kolambu Stores, Krishnagiri, Tamil Nadu**.
+Complete, production-quality Grocery Shop Inventory, Stock, Purchase, Order & Billing Management System built for **New Columbu Stores, Krishnagiri, Tamil Nadu**.
 
 ---
 
@@ -17,7 +17,7 @@ Complete, production-quality Grocery Shop Inventory, Stock, Purchase, Order & Bi
 - **Sales Returns**: Original invoice lookup, item selection, auto-stock replenishing, and refund tracking.
 - **Expenses & Net Profit**: Track operational expenses (Rent, EB, Salary, Transport) to compute Gross and Net Business Profit.
 - **Analytics & Reports**: Real-time financial P&L statements, product sales rankings, and total inventory valuation.
-- **User Roles & Security**: RBAC (Admin, Manager, Cashier, Stock Manager) + audit log history for price & stock modifications.
+- **User Roles & Security**: Unified RBAC (Admin / Store Owner & Cashier with full integrated stock & inventory management) + immutable audit logs for price & stock changes.
 - **Customer Ordering System**: Built-in grocery catalog ordering with real-time cashier notifications and "Transfer to Billing POS" capabilities.
 
 ---
@@ -52,11 +52,10 @@ npm run dev      # Starts frontend on http://localhost:5173
 
 ## 🔐 Default Demo Logins
 
-| Role | Email | Password |
-|---|---|---|
-| **Admin** | `admin@kolambu.com` | `admin123` |
-| **Cashier** | `cashier@kolambu.com` | `cashier123` |
-| **Stock Manager** | `stock@kolambu.com` | `stock123` |
+| Role | Email | Password | Permissions |
+|---|---|---|---|
+| **Admin** | `admin@columbu.com` | `admin123` | Full access to all modules, financial P&L reports, user & role management, audit logs, store settings, stock & inventory. |
+| **Cashier** | `cashier@columbu.com` | `cashier123` | POS Billing, receipts, customer accounts & udhar, purchase inward, product catalog, stock adjustments, batch & expiry monitoring. |
 
 ---
 
