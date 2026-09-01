@@ -5,6 +5,7 @@ import {
   CheckCheck, Package, AlertTriangle, ShieldAlert, Clock, Info,
   CheckCircle, Trash2, ExternalLink, Menu, Store
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import clsx from 'clsx';

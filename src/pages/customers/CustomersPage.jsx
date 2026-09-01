@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, Users, Phone, MapPin, DollarSign, Eye, CreditCard, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Search, Users, Phone, MapPin, DollarSign, Eye, CreditCard, RotateCcw, AlertCircle, CheckCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -36,8 +37,8 @@ function CustomerFormModal({ customer, onSave, onClose }) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
@@ -175,7 +176,8 @@ function CustomerFormModal({ customer, onSave, onClose }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

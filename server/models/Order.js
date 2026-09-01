@@ -28,6 +28,8 @@ const orderSchema = new mongoose.Schema({
   confirmedByName: { type: String },
   confirmedByRole: { type: String },
   confirmedAt: { type: Date },
+  lastUpdatedBy: { type: String },
+  lastUpdatedByRole: { type: String },
   statusLogs: [{
     status: { type: String },
     changedBy: { type: String },

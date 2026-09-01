@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Warehouse, Plus, Search, Filter, AlertTriangle, ArrowDown,
-  ArrowUp, RefreshCw, Layers, CheckCircle, Package, Tag
+  ArrowUp, RefreshCw, Layers, CheckCircle, Package, Tag, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -55,8 +56,8 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
@@ -170,7 +171,8 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

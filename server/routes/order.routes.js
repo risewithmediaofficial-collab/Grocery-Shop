@@ -136,16 +136,23 @@ router.put('/:id/status', protect, async (req, res) => {
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
     
     order.status = status;
-    order.confirmedBy = req.user._id;
-    order.confirmedByName = req.user.name || 'Admin';
-    order.confirmedByRole = req.user.role || 'admin';
-    order.confirmedAt = new Date();
+
+    // Only set confirmedBy if the order was not already confirmed
+    if (status === 'confirmed' || !order.confirmedByName) {
+      order.confirmedBy = req.user._id;
+      order.confirmedByName = req.user.name || (req.user.role === 'admin' ? 'Admin User' : 'Cashier');
+      order.confirmedByRole = req.user.role || 'staff';
+      order.confirmedAt = new Date();
+    }
+
+    order.lastUpdatedBy = req.user.name || 'Staff';
+    order.lastUpdatedByRole = req.user.role || 'staff';
 
     if (!order.statusLogs) order.statusLogs = [];
     order.statusLogs.push({
       status,
-      changedBy: req.user.name || 'Admin',
-      changedByRole: req.user.role || 'admin',
+      changedBy: req.user.name || 'Staff',
+      changedByRole: req.user.role || 'staff',
       changedAt: new Date()
     });
 
@@ -155,12 +162,12 @@ router.put('/:id/status', protect, async (req, res) => {
     try {
       const statusTitle = status === 'confirmed'
         ? `✅ Order #${order.orderNumber} Accepted by ${req.user.name}`
-        : `🔄 Order #${order.orderNumber} Updated to "${status.replace(/_/g, ' ')}" by ${req.user.name}`;
+        : `🔄 Order #${order.orderNumber} Marked as "${status.replace(/_/g, ' ')}" by ${req.user.name}`;
 
       await Notification.create({
         type: 'new_order',
         title: statusTitle,
-        message: `${req.user.name} (${req.user.role}) changed status of Order #${order.orderNumber} for ${order.customerName || 'Customer'} to "${status.replace(/_/g, ' ')}".`,
+        message: `${req.user.name} (${req.user.role}) updated Order #${order.orderNumber} for ${order.customerName || 'Customer'} to "${status.replace(/_/g, ' ')}".`,
         severity: status === 'confirmed' ? 'success' : 'info',
         relatedId: order._id,
         relatedModel: 'Order',
@@ -185,18 +192,24 @@ router.post('/:id/send-to-billing', protect, async (req, res) => {
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
     
     order.sentToBilling = true;
-    order.sentToBillingBy = req.user.name || 'Admin';
+    order.sentToBillingBy = req.user.name || 'Staff';
     order.status = 'confirmed';
-    order.confirmedBy = req.user._id;
-    order.confirmedByName = req.user.name || 'Admin';
-    order.confirmedByRole = req.user.role || 'admin';
-    order.confirmedAt = new Date();
+
+    if (!order.confirmedByName) {
+      order.confirmedBy = req.user._id;
+      order.confirmedByName = req.user.name || (req.user.role === 'admin' ? 'Admin User' : 'Cashier');
+      order.confirmedByRole = req.user.role || 'staff';
+      order.confirmedAt = new Date();
+    }
+
+    order.lastUpdatedBy = req.user.name || 'Staff';
+    order.lastUpdatedByRole = req.user.role || 'staff';
 
     if (!order.statusLogs) order.statusLogs = [];
     order.statusLogs.push({
       status: 'confirmed',
-      changedBy: req.user.name || 'Admin',
-      changedByRole: req.user.role || 'admin',
+      changedBy: req.user.name || 'Staff',
+      changedByRole: req.user.role || 'staff',
       changedAt: new Date()
     });
 

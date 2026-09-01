@@ -18,7 +18,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !window.location.pathname.startsWith('/order')) {
+    const p = window.location.pathname;
+    const isPublicCustomerRoute = p.startsWith('/order') || p.startsWith('/customer') || p.startsWith('/shop');
+    if (error.response?.status === 401 && !isPublicCustomerRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

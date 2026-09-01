@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   Plus, Search, Filter, Package, Edit, Trash2, BarChart2,
@@ -83,8 +84,8 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] my-auto shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
@@ -330,7 +331,8 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ShoppingCart, Package, CheckCircle, Clock, Search, Plus, Minus,
@@ -8,15 +9,17 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import clsx from 'clsx';
 
 export default function OrdersPage() {
+  const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const cart = useCart();
   const [orders, setOrders] = useState([]);
   const [catalog, setCatalog] = useState([]);
-  const [viewMode, setViewMode] = useState('admin'); // 'admin' or 'customer'
+  const [viewMode, setViewMode] = useState('queue'); // 'queue' (Orders Queue) or 'create' (Create Order)
   const [queueTab, setQueueTab] = useState('active'); // 'active' | 'completed' | 'all'
   const [search, setSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
@@ -220,7 +223,7 @@ export default function OrdersPage() {
       setCustomerCart({});
       setCustomerInfo({ name: '', mobile: '', address: '', notes: '' });
       loadData();
-      setViewMode('admin');
+      setViewMode('queue');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit order');
     } finally {
@@ -275,10 +278,10 @@ export default function OrdersPage() {
           {/* Mode Switcher */}
           <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-2xs">
             <button
-              onClick={() => setViewMode('admin')}
+              onClick={() => setViewMode('queue')}
               className={clsx(
                 'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer',
-                viewMode === 'admin'
+                viewMode === 'queue'
                   ? 'bg-white shadow-xs text-primary-700 font-extrabold'
                   : 'text-gray-600 hover:text-gray-900'
               )}
@@ -286,10 +289,10 @@ export default function OrdersPage() {
               🏪 Orders Queue ({orders.length})
             </button>
             <button
-              onClick={() => setViewMode('customer')}
+              onClick={() => setViewMode('create')}
               className={clsx(
                 'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer',
-                viewMode === 'customer'
+                viewMode === 'create'
                   ? 'bg-white shadow-xs text-primary-700 font-extrabold'
                   : 'text-gray-600 hover:text-gray-900'
               )}
@@ -319,8 +322,8 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* VIEW MODE 1: CLEAN FULL-WIDTH ADMIN ORDERS QUEUE WITH SEPARATED COMPLETED DATA */}
-      {viewMode === 'admin' && (
+      {/* VIEW MODE 1: CLEAN FULL-WIDTH ORDERS QUEUE WITH SEPARATED COMPLETED DATA */}
+      {viewMode === 'queue' && (
         <div className="space-y-6">
           {/* Stats Cards (4 Columns) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -544,14 +547,17 @@ export default function OrdersPage() {
                               <div className="mt-1 flex items-center gap-1">
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
                                   <CheckCircle size={10} className="text-emerald-600" />
-                                  <span>Accepted by {ord.confirmedByName}</span>
+                                  <span>
+                                    Accepted by {ord.confirmedByName === currentUser?.name ? 'You' : ord.confirmedByName}
+                                    {ord.confirmedByRole && ord.confirmedByName !== currentUser?.name ? ` (${ord.confirmedByRole})` : ''}
+                                  </span>
                                 </span>
                               </div>
                             )}
                             {ord.sentToBilling && (
                               <div className="mt-1 flex items-center gap-1">
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 shadow-2xs">
-                                  <span>🚀 POS: {ord.sentToBillingBy || ord.confirmedByName || 'Admin'}</span>
+                                  <span>🚀 POS: {ord.sentToBillingBy || ord.confirmedByName || 'Staff'}</span>
                                 </span>
                               </div>
                             )}
@@ -646,9 +652,9 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* DEDICATED ORDER DETAILS & DELIVERY FORM MODAL */}
-      {selectedOrderDetails && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      {/* DEDICATED ORDER DETAILS & DELIVERY FORM MODAL (PORTAL TO DOCUMENT.BODY) */}
+      {selectedOrderDetails && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] my-auto flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
@@ -754,7 +760,7 @@ export default function OrdersPage() {
                   {selectedOrderDetails.confirmedByName ? (
                     <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
                       <CheckCircle size={14} className="text-emerald-600" />
-                      <span>Accepted by: <strong>{selectedOrderDetails.confirmedByName}</strong> ({selectedOrderDetails.confirmedByRole || 'Admin'})</span>
+                      <span>Accepted by: <strong>{selectedOrderDetails.confirmedByName === currentUser?.name ? 'You' : selectedOrderDetails.confirmedByName}</strong> ({selectedOrderDetails.confirmedByRole || 'Staff'})</span>
                       {selectedOrderDetails.confirmedAt && (
                         <span className="text-emerald-700 text-[11px] font-normal">
                           · {new Date(selectedOrderDetails.confirmedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
@@ -770,7 +776,7 @@ export default function OrdersPage() {
 
                   {selectedOrderDetails.sentToBilling && (
                     <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
-                      <span>🚀 Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.confirmedByName || 'Admin'}</strong></span>
+                      <span>🚀 Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.confirmedByName || 'Staff'}</strong></span>
                     </div>
                   )}
                 </div>
@@ -807,11 +813,12 @@ export default function OrdersPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* VIEW MODE 2: CUSTOMER ORDER VIEW (Admin Order Creation) */}
-      {viewMode === 'customer' && (
+      {/* VIEW MODE 2: CREATE ORDER VIEW (Store Staff Order Creation) */}
+      {viewMode === 'create' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left / Products Grid */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-4">
