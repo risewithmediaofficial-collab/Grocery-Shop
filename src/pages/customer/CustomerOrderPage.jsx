@@ -8,6 +8,15 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { generateOrderConfirmationMessage, openWhatsAppChat, STORE_DETAILS } from '../../utils/whatsapp';
 import clsx from 'clsx';
+import {
+  getProductCategory,
+  getProductSubcategory,
+  SUBCATEGORY_ICONS,
+  isHexObjectId
+} from '../../utils/groceryVariants';
+import QuantityPackagingModal from '../../components/common/QuantityPackagingModal';
+import OrderStatusTracker from '../../components/orders/OrderStatusTracker';
+import SubcategorySwipeBar from '../../components/common/SubcategorySwipeBar';
 
 const CUSTOMER_SESSION_KEY = 'columbu_customer_session';
 
@@ -16,6 +25,8 @@ export default function CustomerOrderPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('all');
+  const [selectedProductForPackaging, setSelectedProductForPackaging] = useState(null);
 
   // Customer Session (Mobile + OTP)
   const [customerSession, setCustomerSession] = useState(() => {
@@ -47,7 +58,23 @@ export default function CustomerOrderPage() {
   const [customerCart, setCustomerCart] = useState(() => {
     try {
       const saved = localStorage.getItem('columbu_customer_cart');
-      return saved ? JSON.parse(saved) : {};
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      if (!parsed || typeof parsed !== 'object') return {};
+
+      // Consolidate legacy composite keys to strictly base product ID
+      const consolidated = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        let pId = k;
+        if (typeof v === 'object' && v !== null) {
+          pId = v.productId || v.product?._id || k.split('_')[0];
+          consolidated[pId] = { ...v, productId: pId };
+        } else {
+          pId = k.split('_')[0];
+          consolidated[pId] = v;
+        }
+      }
+      return consolidated;
     } catch {
       return {};
     }
@@ -62,6 +89,7 @@ export default function CustomerOrderPage() {
     }
   });
 
+  const [deliveryMode, setDeliveryMode] = useState('delivery'); // 'delivery' | 'pickup'
   const [submitting, setSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
@@ -120,13 +148,13 @@ export default function CustomerOrderPage() {
     loadCatalog();
   }, [loadCatalog]);
 
-  // Extract unique categories
+  // Extract unique categories using getProductCategory (never returns raw ObjectIds)
   const categories = useMemo(() => {
-    const defaultOrder = ['food', 'beverages', 'snacks', 'household'];
+    const defaultOrder = ['food & staples', 'beverages & dairy', 'snacks & biscuits', 'personal & household care'];
     const cats = new Set();
     catalog.forEach(p => {
-      if (p.category?.name) cats.add(p.category.name);
-      else if (typeof p.category === 'string') cats.add(p.category);
+      const catName = getProductCategory(p);
+      if (catName) cats.add(catName);
     });
     const sorted = Array.from(cats).sort((a, b) => {
       const idxA = defaultOrder.indexOf(a.toLowerCase());
@@ -139,39 +167,131 @@ export default function CustomerOrderPage() {
     return ['all', ...sorted];
   }, [catalog]);
 
-  // Filter products by search and category
+  // Extract unique human-readable subcategories for the selected category
+  const subCategories = useMemo(() => {
+    const subs = new Set();
+    catalog.forEach(p => {
+      const catName = getProductCategory(p);
+      if (selectedCategory === 'all' || catName.toLowerCase() === selectedCategory.toLowerCase()) {
+        const subName = getProductSubcategory(p);
+        if (subName && !isHexObjectId(subName)) subs.add(subName);
+      }
+    });
+    return ['all', ...Array.from(subs).sort()];
+  }, [catalog, selectedCategory]);
+
+  // Filter products by search, category, and subcategory
   const filteredProducts = useMemo(() => {
     return catalog.filter(p => {
+      const catName = getProductCategory(p);
+      const subName = getProductSubcategory(p);
+
       const matchSearch = search.trim() === '' ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.category?.name && p.category.name.toLowerCase().includes(search.toLowerCase())) ||
+        catName.toLowerCase().includes(search.toLowerCase()) ||
+        subName.toLowerCase().includes(search.toLowerCase()) ||
         (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
       
-      const catName = p.category?.name || p.category || '';
       const matchCategory = selectedCategory === 'all' || catName.toLowerCase() === selectedCategory.toLowerCase();
+      const matchSubCategory = selectedSubCategory === 'all' || subName.toLowerCase() === selectedSubCategory.toLowerCase();
 
-      return matchSearch && matchCategory;
+      return matchSearch && matchCategory && matchSubCategory;
     });
-  }, [catalog, search, selectedCategory]);
+  }, [catalog, search, selectedCategory, selectedSubCategory]);
 
-  // Cart helper functions
-  const updateQty = (productId, delta) => {
+  // Cart operations with single entry per product & modify workflow
+  const handleOpenPackaging = (prod) => {
+    const prodId = prod._id;
+    const existingEntry = Object.entries(customerCart).find(([k, v]) => {
+      if (k === prodId || k.startsWith(`${prodId}_`)) return true;
+      const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+      return vProdId === prodId;
+    });
+
+    const existingItem = existingEntry ? existingEntry[1] : null;
+
+    if (existingItem) {
+      const qty = typeof existingItem === 'object' ? existingItem.quantity : existingItem;
+      const unit = typeof existingItem === 'object' ? existingItem.unit : (prod.unit?.symbol || 'unit');
+      toast(`"${prod.name}" is already in your cart (Qty: ${qty} ${unit}). Modifying item.`, { icon: 'ℹ️' });
+    }
+    setSelectedProductForPackaging(prod);
+  };
+
+  const handleAddWithPackaging = (packData) => {
+    const { product, name, sellingPrice, quantity, unit, packDetails } = packData;
+    const productId = product._id;
+
     setCustomerCart(prev => {
-      const current = prev[productId] || 0;
-      const next = Math.max(0, current + delta);
-      if (next === 0) {
-        const copy = { ...prev };
-        delete copy[productId];
-        return copy;
+      // Remove any existing duplicate or variant entries for this base product
+      const nextCart = {};
+      let wasExisting = false;
+
+      for (const [k, v] of Object.entries(prev)) {
+        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        if (k === productId || vProdId === productId || k.startsWith(`${productId}_`)) {
+          wasExisting = true;
+        } else {
+          nextCart[k] = v;
+        }
       }
-      return { ...prev, [productId]: next };
+
+      // Add strictly one updated entry for this product
+      nextCart[productId] = {
+        productId,
+        product,
+        name,
+        sellingPrice,
+        quantity,
+        unit,
+        packDetails,
+      };
+
+      if (wasExisting) {
+        toast.success(`Updated ${name} in cart: ${quantity} ${unit} (₹${Math.round(sellingPrice * quantity)})`);
+      } else {
+        toast.success(`Added ${quantity} ${unit} of ${name} to cart!`);
+      }
+
+      return nextCart;
     });
   };
 
-  const removeCartItem = (productId) => {
+  const updateQty = (key, delta) => {
     setCustomerCart(prev => {
-      const copy = { ...prev };
-      delete copy[productId];
+      // Find key or matching productId
+      const matchingKey = Object.keys(prev).find(k => {
+        if (k === key) return true;
+        const v = prev[k];
+        const vId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        return vId === key || k.startsWith(`${key}_`);
+      }) || key;
+
+      const item = prev[matchingKey];
+      if (item === undefined) return prev;
+      const currentQty = typeof item === 'object' ? (item.quantity || 1) : Number(item);
+      const nextQty = Math.max(0, currentQty + delta);
+      if (nextQty === 0) {
+        const copy = { ...prev };
+        delete copy[matchingKey];
+        return copy;
+      }
+      if (typeof item === 'object') {
+        return { ...prev, [matchingKey]: { ...item, quantity: nextQty } };
+      }
+      return { ...prev, [matchingKey]: nextQty };
+    });
+  };
+
+  const removeCartItem = (key) => {
+    setCustomerCart(prev => {
+      const copy = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        if (k !== key && vProdId !== key && !k.startsWith(`${key}_`)) {
+          copy[k] = v;
+        }
+      }
       return copy;
     });
   };
@@ -183,14 +303,52 @@ export default function CustomerOrderPage() {
     } catch {}
   };
 
-  // Calculate cart stats
-  const cartEntries = Object.entries(customerCart);
-  const totalItemCount = cartEntries.reduce((sum, [, qty]) => sum + qty, 0);
-  const totalEstimatedAmount = cartEntries.reduce((sum, [id, qty]) => {
-    const prod = catalog.find(p => p._id === id);
-    const price = prod?.sellingPrice || 0;
-    return sum + (price * qty);
-  }, 0);
+  const getNormalizedCartItem = useCallback((key, val) => {
+    if (typeof val === 'object' && val !== null) {
+      const pId = val.productId || val.product?._id || key.split('_')[0] || key;
+      return {
+        key: pId,
+        productId: pId,
+        product: val.product || catalog.find(p => p._id === pId),
+        name: val.name || val.product?.name || 'Item',
+        sellingPrice: Number(val.sellingPrice || val.product?.sellingPrice || 0),
+        quantity: Number(val.quantity || 1),
+        unit: val.unit || val.product?.unit?.symbol || 'unit',
+      };
+    }
+    const baseKey = key.split('_')[0] || key;
+    const prod = catalog.find(p => p._id === baseKey);
+    return {
+      key: baseKey,
+      productId: baseKey,
+      product: prod,
+      name: prod?.name || 'Item',
+      sellingPrice: Number(prod?.sellingPrice || 0),
+      quantity: Number(val || 1),
+      unit: prod?.unit?.symbol || 'unit',
+    };
+  }, [catalog]);
+
+  const normalizedCartList = useMemo(() => {
+    const map = new Map();
+    Object.entries(customerCart).forEach(([k, v]) => {
+      const item = getNormalizedCartItem(k, v);
+      const uniqueId = item.productId || k.split('_')[0] || k;
+      // Deduplicate strictly: one entry per unique base product ID
+      map.set(uniqueId, { ...item, key: uniqueId, productId: uniqueId });
+    });
+    return Array.from(map.values());
+  }, [customerCart, getNormalizedCartItem]);
+
+  const totalItemCount = normalizedCartList.reduce((sum, item) => sum + item.quantity, 0);
+  const totalEstimatedAmount = normalizedCartList.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
+
+  const STANDARD_DELIVERY_FEE = 30;
+  const FREE_DELIVERY_THRESHOLD = 500;
+  const deliveryCharge = deliveryMode === 'pickup'
+    ? 0
+    : (totalEstimatedAmount >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE);
+  const finalGrandTotal = totalEstimatedAmount + deliveryCharge;
 
   // Send OTP
   const handleSendOtp = async (e) => {
@@ -279,7 +437,7 @@ export default function CustomerOrderPage() {
   // Handle Order Submit
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
-    if (cartEntries.length === 0) {
+    if (normalizedCartList.length === 0) {
       return toast.error('Please select at least 1 item to place an order');
     }
 
@@ -297,24 +455,30 @@ export default function CustomerOrderPage() {
       return toast.error('Please enter a valid 10-digit mobile number');
     }
 
+    if (deliveryMode === 'delivery' && !customerInfo.address.trim()) {
+      return toast.error('Please enter your delivery address for Home Delivery');
+    }
+
     setSubmitting(true);
     try {
-      const orderItems = cartEntries.map(([productId, quantity]) => {
-        const prod = catalog.find(p => p._id === productId);
-        return {
-          product: productId,
-          productName: prod?.name || 'Grocery Item',
-          quantity,
-          unit: prod?.unit?.symbol || 'qty',
-          notes: prod?.sellingPrice ? `₹${prod.sellingPrice} / unit` : ''
-        };
-      });
+      const orderItems = normalizedCartList.map((item) => ({
+        product: item.productId,
+        productName: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: item.sellingPrice ? `₹${item.sellingPrice} / ${item.unit}` : ''
+      }));
+
+      const finalAddress = deliveryMode === 'pickup'
+        ? 'Store Pickup'
+        : (customerInfo.address.trim() || 'Home Delivery');
 
       const res = await api.post('/orders', {
         customerId: customerSession?.customer?._id,
         customerName: customerInfo.name.trim(),
         customerMobile: customerInfo.mobile.trim(),
-        deliveryAddress: customerInfo.address.trim() || 'Store Pickup',
+        deliveryAddress: finalAddress,
+        deliveryCharge,
         notes: customerInfo.notes.trim(),
         items: orderItems,
       });
@@ -456,6 +620,12 @@ export default function CustomerOrderPage() {
                 <span className="text-gray-500 font-medium">Delivery Address:</span>
                 <span className="text-gray-800 text-right max-w-xs">{orderPlaced.deliveryAddress || 'Store Pickup'}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 font-medium">Delivery Charges:</span>
+                <span className={clsx('font-bold', orderPlaced.deliveryCharge > 0 ? 'text-amber-800' : 'text-emerald-700 font-extrabold')}>
+                  {orderPlaced.deliveryCharge > 0 ? `₹${orderPlaced.deliveryCharge}` : 'FREE (₹0)'}
+                </span>
+              </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                 <span className="text-gray-500 font-medium">Status:</span>
                 <span className="badge-yellow text-xs uppercase font-bold">⏳ Order Received</span>
@@ -510,18 +680,26 @@ export default function CustomerOrderPage() {
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {categories.map(cat => {
                     const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
-                    const icon = {
-                      all: '🛍️',
-                      food: '🍚',
-                      beverages: '🥤',
-                      snacks: '🍿',
-                      household: '🧼'
-                    }[cat.toLowerCase()] || '📦';
+                    const iconMap = {
+                      'all': '🛍️',
+                      'food & staples': '🍚',
+                      'beverages & dairy': '🥤',
+                      'snacks & biscuits': '🍿',
+                      'personal & household care': '🧼',
+                      'food': '🍚',
+                      'beverages': '🥤',
+                      'snacks': '🍿',
+                      'household': '🧼',
+                    };
+                    const icon = iconMap[cat.toLowerCase()] || '📦';
 
                     return (
                       <button
                         key={cat}
-                        onClick={() => setSelectedCategory(cat)}
+                        onClick={() => {
+                          setSelectedCategory(cat);
+                          setSelectedSubCategory('all');
+                        }}
                         className={clsx(
                           'px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer',
                           isSelected
@@ -535,6 +713,14 @@ export default function CustomerOrderPage() {
                     );
                   })}
                 </div>
+
+                {/* Subcategory Swipe Bar with arrows and mouse dragging */}
+                <SubcategorySwipeBar
+                  subCategories={subCategories}
+                  selectedSubCategory={selectedSubCategory}
+                  onSelectSubCategory={setSelectedSubCategory}
+                  colorScheme="emerald"
+                />
               </div>
 
               {/* Products Header */}
@@ -565,7 +751,7 @@ export default function CustomerOrderPage() {
                   <p className="font-bold text-gray-600 text-sm">No grocery items found</p>
                   <p className="text-xs mt-1">Try clearing your search query or selecting another category.</p>
                   <button
-                    onClick={() => { setSearch(''); setSelectedCategory('all'); }}
+                    onClick={() => { setSearch(''); setSelectedCategory('all'); setSelectedSubCategory('all'); }}
                     className="btn-secondary btn-sm mt-4 cursor-pointer"
                   >
                     Reset Filters
@@ -574,26 +760,40 @@ export default function CustomerOrderPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {filteredProducts.map(prod => {
-                    const count = customerCart[prod._id] || 0;
-                    const catName = prod.category?.name || prod.category || 'Grocery';
+                    const inCartItem = customerCart[prod._id];
+                    const inCartQty = inCartItem ? (typeof inCartItem === 'object' ? inCartItem.quantity : inCartItem) : 0;
+                    const inCartUnit = inCartItem ? (typeof inCartItem === 'object' ? inCartItem.unit : (prod.unit?.symbol || 'unit')) : '';
+                    const catName = getProductCategory(prod);
+                    const subCatName = getProductSubcategory(prod);
+                    const subIcon = SUBCATEGORY_ICONS[subCatName.toLowerCase()] || '🏷️';
                     const unitName = prod.unit?.symbol || prod.unit?.name || '';
                     const inStock = prod.currentStock > 0;
 
                     return (
                       <div
                         key={prod._id}
+                        onClick={() => handleOpenPackaging(prod)}
                         className={clsx(
-                          'card p-3.5 sm:p-4 flex items-center justify-between gap-3 border transition-all duration-150',
-                          count > 0 ? 'border-primary-400 bg-primary-50/20 shadow-xs' : 'border-gray-200 hover:border-gray-300'
+                          'card p-3.5 sm:p-4 flex items-center justify-between gap-3 border transition-all duration-150 cursor-pointer hover:shadow-md group',
+                          inCartQty > 0
+                            ? 'border-amber-400 bg-amber-50/20 shadow-xs hover:border-amber-500'
+                            : 'border-gray-200 hover:border-primary-400'
                         )}
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm text-gray-900 truncate leading-snug">
+                          <p className="font-bold text-sm text-gray-900 group-hover:text-primary-700 truncate leading-snug">
                             {prod.name}
                           </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {catName} · Stock: <span className={clsx('font-semibold', inStock ? 'text-gray-700' : 'text-red-500')}>{prod.currentStock}</span>
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className="text-[10px] bg-gray-100 text-gray-700 font-semibold px-2 py-0.5 rounded-md shrink-0">
+                              {catName}
+                            </span>
+                            <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                              <span>{subIcon}</span>
+                              <span>{subCatName}</span>
+                            </span>
+                            <span className="text-xs text-gray-400">· Stock: <span className={clsx('font-semibold', inStock ? 'text-gray-700' : 'text-red-500')}>{prod.currentStock}</span></span>
+                          </div>
                           <div className="flex items-baseline gap-1 mt-1.5">
                             <span className="text-base font-extrabold text-primary-700">
                               ₹{prod.sellingPrice}
@@ -606,39 +806,30 @@ export default function CustomerOrderPage() {
                           </div>
                         </div>
 
-                        {/* Quantity Controls */}
-                        <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-xl border border-gray-200 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => updateQty(prod._id, -1)}
-                            disabled={count === 0}
-                            className={clsx(
-                              'w-8 h-8 rounded-lg flex items-center justify-center font-bold transition-all',
-                              count > 0
-                                ? 'bg-white text-gray-700 hover:bg-gray-100 shadow-xs cursor-pointer active:scale-95'
-                                : 'bg-transparent text-gray-300 cursor-not-allowed'
-                            )}
-                            title="Decrease quantity"
-                          >
-                            <Minus size={14} />
-                          </button>
-                          
-                          <span className={clsx(
-                            'w-7 text-center font-extrabold text-sm',
-                            count > 0 ? 'text-primary-800' : 'text-gray-400'
-                          )}>
-                            {count}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() => updateQty(prod._id, 1)}
-                            className="w-8 h-8 bg-primary-600 text-white rounded-lg flex items-center justify-center font-bold hover:bg-primary-700 active:scale-95 shadow-xs transition-all cursor-pointer"
-                            title="Increase quantity"
-                          >
-                            <Plus size={14} />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPackaging(prod);
+                          }}
+                          className={clsx(
+                            'btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center',
+                            inCartQty > 0
+                              ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                              : 'btn-primary'
+                          )}
+                        >
+                          {inCartQty > 0 ? (
+                            <>
+                              <span>✏️ In Cart: {inCartQty}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} />
+                              <span>Add / Packs</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     );
                   })}
@@ -660,7 +851,7 @@ export default function CustomerOrderPage() {
                       <p className="text-xs text-gray-500">{totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in basket</p>
                     </div>
                   </div>
-                  {cartEntries.length > 0 && (
+                  {normalizedCartList.length > 0 && (
                     <button
                       onClick={clearCart}
                       className="text-xs text-red-500 hover:text-red-700 font-medium cursor-pointer"
@@ -672,27 +863,25 @@ export default function CustomerOrderPage() {
 
                 {/* Cart Items List */}
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {cartEntries.length === 0 ? (
+                  {normalizedCartList.length === 0 ? (
                     <div className="text-center py-6 text-gray-400">
                       <ShoppingCart size={32} className="mx-auto mb-2 opacity-30" />
                       <p className="text-xs font-medium text-gray-500">Your cart is empty.</p>
                       <p className="text-[11px] text-gray-400 mt-0.5">Select grocery products from the left to begin.</p>
                     </div>
                   ) : (
-                    cartEntries.map(([id, qty]) => {
-                      const prod = catalog.find(p => p._id === id);
-                      const price = prod?.sellingPrice || 0;
-                      const itemTotal = price * qty;
-                      const unitSymbol = prod?.unit?.symbol || '';
+                    normalizedCartList.map((item) => {
+                      const price = item.sellingPrice || 0;
+                      const itemTotal = price * item.quantity;
 
                       return (
                         <div
-                          key={id}
+                          key={item.key}
                           className="p-2.5 rounded-xl bg-gray-50/90 border border-gray-100 hover:border-gray-200 transition-colors flex items-center justify-between gap-2.5 text-xs"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-gray-800 truncate leading-snug">{prod?.name || 'Item'}</p>
-                            <p className="text-gray-400 text-[11px] mt-0.5">₹{price} {unitSymbol ? `/ ${unitSymbol}` : ''}</p>
+                            <p className="font-bold text-gray-800 truncate leading-snug">{item.name}</p>
+                            <p className="text-gray-400 text-[11px] mt-0.5">₹{price} / {item.unit}</p>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
@@ -700,18 +889,18 @@ export default function CustomerOrderPage() {
                             <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-gray-200 shadow-2xs">
                               <button
                                 type="button"
-                                onClick={() => updateQty(id, -1)}
+                                onClick={() => updateQty(item.key, -1)}
                                 className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
                                 title="Decrease quantity"
                               >
                                 <Minus size={11} />
                               </button>
                               <span className="w-5 text-center font-extrabold text-xs text-primary-800">
-                                {qty}
+                                {item.quantity}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => updateQty(id, 1)}
+                                onClick={() => updateQty(item.key, 1)}
                                 className="w-6 h-6 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center font-bold shadow-2xs transition-colors cursor-pointer"
                                 title="Increase quantity"
                               >
@@ -727,7 +916,7 @@ export default function CustomerOrderPage() {
                             {/* Remove button */}
                             <button
                               type="button"
-                              onClick={() => removeCartItem(id)}
+                              onClick={() => removeCartItem(item.key)}
                               className="text-gray-300 hover:text-red-500 p-1 transition-colors cursor-pointer"
                               title="Remove item"
                             >
@@ -740,11 +929,63 @@ export default function CustomerOrderPage() {
                   )}
                 </div>
 
-                {/* Subtotal summary */}
-                {cartEntries.length > 0 && (
-                  <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-sm">
-                    <span className="font-medium text-gray-600">Estimated Total:</span>
-                    <span className="font-extrabold text-lg text-primary-700">₹{totalEstimatedAmount}</span>
+                {/* Delivery Mode Selector */}
+                <div className="pt-2 border-t border-gray-100 space-y-2">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 block">
+                    Choose Delivery Method:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryMode('delivery')}
+                      className={clsx(
+                        'py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                        deliveryMode === 'delivery'
+                          ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                          : 'text-gray-500 hover:text-gray-800'
+                      )}
+                    >
+                      <span>🚚 Home Delivery</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryMode('pickup')}
+                      className={clsx(
+                        'py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                        deliveryMode === 'pickup'
+                          ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                          : 'text-gray-500 hover:text-gray-800'
+                      )}
+                    >
+                      <span>🏪 Store Pickup (Free)</span>
+                    </button>
+                  </div>
+
+                  {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && totalEstimatedAmount < FREE_DELIVERY_THRESHOLD && (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
+                      <span>🚚</span>
+                      <span>Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for <b>FREE Delivery</b>!</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Subtotal & Delivery Charges Summary */}
+                {normalizedCartList.length > 0 && (
+                  <div className="pt-2 border-t border-gray-100 space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span>Items Subtotal:</span>
+                      <span className="font-bold text-gray-800">₹{totalEstimatedAmount}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span>Delivery Charges:</span>
+                      <span className={clsx('font-bold', deliveryCharge > 0 ? 'text-gray-900' : 'text-emerald-700')}>
+                        {deliveryCharge > 0 ? `₹${deliveryCharge}` : 'FREE (₹0)'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-black pt-1.5 border-t border-dashed border-gray-200 text-gray-900">
+                      <span>Total Payable:</span>
+                      <span className="text-lg text-primary-700">₹{finalGrandTotal}</span>
+                    </div>
                   </div>
                 )}
 
@@ -774,15 +1015,22 @@ export default function CustomerOrderPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="form-label">Delivery Address</label>
-                    <input
-                      className="form-input"
-                      placeholder="Door No, Street name (or Leave blank for pickup)"
-                      value={customerInfo.address}
-                      onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
-                    />
-                  </div>
+                  {deliveryMode === 'delivery' ? (
+                    <div>
+                      <label className="form-label">Delivery Address *</label>
+                      <input
+                        className="form-input"
+                        required
+                        placeholder="Door No, Building, Street, Area"
+                        value={customerInfo.address}
+                        onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
+                      📍 <b>Counter Pickup:</b> Collect at New Columbu Stores, Krishnagiri counter.
+                    </div>
+                  )}
 
                   <div>
                     <label className="form-label">Special Notes</label>
@@ -796,7 +1044,7 @@ export default function CustomerOrderPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting || cartEntries.length === 0}
+                    disabled={submitting || normalizedCartList.length === 0}
                     className="btn-primary w-full py-3.5 text-sm font-bold mt-2 gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                   >
                     {submitting ? (
@@ -975,7 +1223,7 @@ export default function CustomerOrderPage() {
               </button>
             </div>
 
-            {/* Orders List Container with generous spacing */}
+            {/* Orders List Container */}
             <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-gray-50/50">
               {loadingOrders ? (
                 <div className="py-16 text-center text-xs text-gray-400">Loading your orders...</div>
@@ -991,7 +1239,6 @@ export default function CustomerOrderPage() {
                     key={ord._id}
                     className="bg-white rounded-2xl p-5 border border-gray-200 hover:border-primary-300 transition-all shadow-xs hover:shadow-md space-y-4"
                   >
-                    {/* Card Header: Order ID, Date & Status */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100">
                       <div className="flex items-center gap-2.5">
                         <span className="font-mono font-black text-primary-700 text-sm bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-100">
@@ -1022,7 +1269,9 @@ export default function CustomerOrderPage() {
                       </span>
                     </div>
 
-                    {/* Ordered Items List */}
+                    {/* Engaging Live Order Status Tracker */}
+                    <OrderStatusTracker order={ord} />
+
                     <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
                       <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
                         Items in this Order ({(ord.items || []).length}):
@@ -1040,15 +1289,24 @@ export default function CustomerOrderPage() {
                       </div>
                     </div>
 
-                    {/* Delivery Location & Order Details */}
-                    <div className="flex items-center justify-between gap-3 pt-1 text-xs text-gray-500">
+                    <div className="flex items-center justify-between gap-3 pt-2 text-xs border-t border-gray-100">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <MapPin size={13} className="text-primary-600 shrink-0" />
                         <span className="truncate font-medium text-gray-700">{ord.deliveryAddress || 'Store Pickup'}</span>
                       </div>
-                      <span className="text-[11px] font-semibold text-gray-400 shrink-0">
-                        {(ord.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0)} items total
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={clsx(
+                          'px-2 py-0.5 rounded-md text-[10px] font-bold border',
+                          ord.deliveryCharge > 0
+                            ? 'bg-amber-50 text-amber-900 border-amber-200'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        )}>
+                          {ord.deliveryCharge > 0 ? `Delivery: ₹${ord.deliveryCharge}` : 'Free Delivery'}
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-400">
+                          {(ord.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0)} items
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1078,36 +1336,34 @@ export default function CustomerOrderPage() {
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               {/* Items list */}
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {cartEntries.length === 0 ? (
+                {normalizedCartList.length === 0 ? (
                   <p className="text-center text-xs text-gray-400 py-6">Your cart is empty.</p>
                 ) : (
-                  cartEntries.map(([id, qty]) => {
-                    const prod = catalog.find(p => p._id === id);
-                    const price = prod?.sellingPrice || 0;
-                    const itemTotal = price * qty;
-                    const unitSymbol = prod?.unit?.symbol || '';
+                  normalizedCartList.map((item) => {
+                    const price = item.sellingPrice || 0;
+                    const itemTotal = price * item.quantity;
                     return (
-                      <div key={id} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 flex justify-between items-center text-xs gap-2">
+                      <div key={item.key} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 flex justify-between items-center text-xs gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-gray-900 truncate">{prod?.name}</p>
-                          <p className="text-gray-400 text-[11px]">₹{price} {unitSymbol ? `/ ${unitSymbol}` : ''}</p>
+                          <p className="font-bold text-gray-900 truncate">{item.name}</p>
+                          <p className="text-gray-400 text-[11px]">₹{price} / {item.unit}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-gray-200 shadow-2xs">
                             <button
                               type="button"
-                              onClick={() => updateQty(id, -1)}
+                              onClick={() => updateQty(item.key, -1)}
                               className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
                               title="Decrease quantity"
                             >
                               <Minus size={11} />
                             </button>
                             <span className="w-5 text-center font-extrabold text-xs text-primary-800">
-                              {qty}
+                              {item.quantity}
                             </span>
                             <button
                               type="button"
-                              onClick={() => updateQty(id, 1)}
+                              onClick={() => updateQty(item.key, 1)}
                               className="w-6 h-6 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center font-bold shadow-2xs cursor-pointer"
                               title="Increase quantity"
                             >
@@ -1118,7 +1374,7 @@ export default function CustomerOrderPage() {
                           <span className="font-extrabold text-primary-700 w-11 text-right">₹{itemTotal}</span>
                           <button
                             type="button"
-                            onClick={() => removeCartItem(id)}
+                            onClick={() => removeCartItem(item.key)}
                             className="text-gray-300 hover:text-red-500 p-1 cursor-pointer"
                             title="Remove item"
                           >
@@ -1131,10 +1387,62 @@ export default function CustomerOrderPage() {
                 )}
               </div>
 
-              {cartEntries.length > 0 && (
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-sm font-bold">
-                  <span>Estimated Total:</span>
-                  <span className="text-primary-700 text-base">₹{totalEstimatedAmount}</span>
+              {/* Mobile Delivery Mode Selector */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 block">
+                  Delivery Method:
+                </span>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMode('delivery')}
+                    className={clsx(
+                      'py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                      deliveryMode === 'delivery'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                        : 'text-gray-500 hover:text-gray-800'
+                    )}
+                  >
+                    <span>🚚 Delivery</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryMode('pickup')}
+                    className={clsx(
+                      'py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                      deliveryMode === 'pickup'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                        : 'text-gray-500 hover:text-gray-800'
+                    )}
+                  >
+                    <span>🏪 Pickup (Free)</span>
+                  </button>
+                </div>
+
+                {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && totalEstimatedAmount < FREE_DELIVERY_THRESHOLD && (
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
+                    <span>🚚</span>
+                    <span>Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for <b>FREE Delivery</b>!</span>
+                  </div>
+                )}
+              </div>
+
+              {normalizedCartList.length > 0 && (
+                <div className="pt-2 border-t border-gray-100 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-gray-600">
+                    <span>Items Subtotal:</span>
+                    <span className="font-bold text-gray-800">₹{totalEstimatedAmount}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-600">
+                    <span>Delivery Charges:</span>
+                    <span className={clsx('font-bold', deliveryCharge > 0 ? 'text-gray-900' : 'text-emerald-700')}>
+                      {deliveryCharge > 0 ? `₹${deliveryCharge}` : 'FREE (₹0)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-black pt-1.5 border-t border-dashed border-gray-200 text-gray-900">
+                    <span>Total Payable:</span>
+                    <span className="text-lg text-primary-700">₹{finalGrandTotal}</span>
+                  </div>
                 </div>
               )}
 
@@ -1162,15 +1470,22 @@ export default function CustomerOrderPage() {
                     onChange={e => setCustomerInfo(i => ({ ...i, mobile: e.target.value.replace(/\D/g, '') }))}
                   />
                 </div>
-                <div>
-                  <label className="form-label">Delivery Address</label>
-                  <input
-                    className="form-input"
-                    placeholder="Door No, Street name"
-                    value={customerInfo.address}
-                    onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
-                  />
-                </div>
+                {deliveryMode === 'delivery' ? (
+                  <div>
+                    <label className="form-label">Delivery Address *</label>
+                    <input
+                      className="form-input"
+                      required
+                      placeholder="Door No, Building, Street, Area"
+                      value={customerInfo.address}
+                      onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
+                    📍 <b>Counter Pickup:</b> Collect at New Columbu Stores counter.
+                  </div>
+                )}
                 <div>
                   <label className="form-label">Special Notes</label>
                   <input
@@ -1183,7 +1498,7 @@ export default function CustomerOrderPage() {
 
                 <button
                   type="submit"
-                  disabled={submitting || cartEntries.length === 0}
+                  disabled={submitting || normalizedCartList.length === 0}
                   className="btn-primary w-full py-3.5 text-sm font-bold mt-2 gap-2 cursor-pointer shadow-md"
                 >
                   {submitting ? 'Submitting Order...' : 'Place Grocery Order'}
@@ -1192,6 +1507,16 @@ export default function CustomerOrderPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Packaging & Quantity Modal */}
+      {selectedProductForPackaging && (
+        <QuantityPackagingModal
+          product={selectedProductForPackaging}
+          existingCartItem={customerCart[selectedProductForPackaging._id]}
+          onConfirm={handleAddWithPackaging}
+          onClose={() => setSelectedProductForPackaging(null)}
+        />
       )}
     </div>
   );

@@ -53,10 +53,19 @@ describe('CustomerOrderPage (Public Customer Grocery Portal)', () => {
     expect(productTitle).toBeInTheDocument();
     expect(screen.getByText('Whole Wheat Atta 5kg')).toBeInTheDocument();
 
-    // Click Increase quantity (+) button
-    const increaseBtns = screen.getAllByTitle('Increase quantity');
+    // Click "Add / Packs" button on product card
+    const addPacksBtns = screen.getAllByRole('button', { name: /Add \/ Packs/i });
     await act(async () => {
-      fireEvent.click(increaseBtns[0]);
+      fireEvent.click(addPacksBtns[0]);
+    });
+
+    // Verify Packaging Modal is open
+    expect(screen.getByText('Select Packaging & Quantity')).toBeInTheDocument();
+
+    // Confirm adding to cart from modal
+    const confirmAddBtn = screen.getByRole('button', { name: /Add to Cart/i });
+    await act(async () => {
+      fireEvent.click(confirmAddBtn);
     });
 
     expect(screen.getByText('Your Grocery Cart')).toBeInTheDocument();

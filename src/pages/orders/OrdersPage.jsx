@@ -13,6 +13,16 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import clsx from 'clsx';
 
+import {
+  getProductCategory,
+  getProductSubcategory,
+  SUBCATEGORY_ICONS,
+  isHexObjectId
+} from '../../utils/groceryVariants';
+import QuantityPackagingModal from '../../components/common/QuantityPackagingModal';
+import OrderStatusTracker from '../../components/orders/OrderStatusTracker';
+import SubcategorySwipeBar from '../../components/common/SubcategorySwipeBar';
+
 export default function OrdersPage() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
@@ -24,21 +34,43 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null); // For Order Details Modal
   const [processingOrderId, setProcessingOrderId] = useState(null);
+  const [selectedProductForPackaging, setSelectedProductForPackaging] = useState(null);
 
   // Admin Order Creation Draft
   const [customerCart, setCustomerCart] = useState(() => {
     try {
       const saved = localStorage.getItem('columbu_admin_draft_cart');
-      return saved ? JSON.parse(saved) : {};
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      if (!parsed || typeof parsed !== 'object') return {};
+
+      // Consolidate legacy composite keys to strictly base product ID
+      const consolidated = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        let pId = k;
+        if (typeof v === 'object' && v !== null) {
+          pId = v.productId || v.product?._id || k.split('_')[0];
+          consolidated[pId] = { ...v, productId: pId };
+        } else {
+          pId = k.split('_')[0];
+          consolidated[pId] = v;
+        }
+      }
+      return consolidated;
     } catch {
       return {};
     }
   });
   const [customerInfo, setCustomerInfo] = useState({ name: '', mobile: '', address: '', notes: '' });
+  const [adminDeliveryMode, setAdminDeliveryMode] = useState('delivery'); // 'delivery' | 'pickup'
+  const [adminDeliveryCharge, setAdminDeliveryCharge] = useState(30);
+  const [editingDeliveryFee, setEditingDeliveryFee] = useState(false);
+  const [tempDeliveryFee, setTempDeliveryFee] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,13 +112,13 @@ export default function OrdersPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Structured categories
+  // Structured categories using getProductCategory (never returns raw ObjectIds)
   const categories = useMemo(() => {
-    const defaultOrder = ['food', 'beverages', 'snacks', 'household'];
+    const defaultOrder = ['food & staples', 'beverages & dairy', 'snacks & biscuits', 'personal & household care'];
     const cats = new Set();
     catalog.forEach(p => {
-      if (p.category?.name) cats.add(p.category.name);
-      else if (typeof p.category === 'string') cats.add(p.category);
+      const catName = getProductCategory(p);
+      if (catName) cats.add(catName);
     });
     const sorted = Array.from(cats).sort((a, b) => {
       const idxA = defaultOrder.indexOf(a.toLowerCase());
@@ -98,6 +130,19 @@ export default function OrdersPage() {
     });
     return ['all', ...sorted];
   }, [catalog]);
+
+  // Available human-readable subcategories for the selected category
+  const subCategories = useMemo(() => {
+    const subs = new Set();
+    catalog.forEach(p => {
+      const catName = getProductCategory(p);
+      if (selectedCategory === 'all' || catName.toLowerCase() === selectedCategory.toLowerCase()) {
+        const subName = getProductSubcategory(p);
+        if (subName && !isHexObjectId(subName)) subs.add(subName);
+      }
+    });
+    return ['all', ...Array.from(subs).sort()];
+  }, [catalog, selectedCategory]);
 
   // Active vs Completed Counts
   const activeOrdersCount = useMemo(() => {
@@ -111,14 +156,21 @@ export default function OrdersPage() {
   // Filter products for Create Order mode
   const filteredProducts = useMemo(() => {
     return catalog.filter(p => {
+      const catName = getProductCategory(p);
+      const subName = getProductSubcategory(p);
+
       const matchSearch = search.trim() === '' ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.category?.name && p.category.name.toLowerCase().includes(search.toLowerCase()));
-      const catName = p.category?.name || p.category || '';
+        catName.toLowerCase().includes(search.toLowerCase()) ||
+        subName.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
+
       const matchCat = selectedCategory === 'all' || catName.toLowerCase() === selectedCategory.toLowerCase();
-      return matchSearch && matchCat;
+      const matchSub = selectedSubCategory === 'all' || subName.toLowerCase() === selectedSubCategory.toLowerCase();
+
+      return matchSearch && matchCat && matchSub;
     });
-  }, [catalog, search, selectedCategory]);
+  }, [catalog, search, selectedCategory, selectedSubCategory]);
 
   // Filter orders for Admin mode with Active vs Completed separation
   const filteredOrders = useMemo(() => {
@@ -143,34 +195,142 @@ export default function OrdersPage() {
     });
   }, [orders, queueTab, orderSearch, statusFilter]);
 
-  // Cart operations
-  const updateQty = (id, delta) => {
+  // Cart operations with single entry per product & modify workflow
+  const handleOpenPackaging = (prod) => {
+    const prodId = prod._id;
+    const existingEntry = Object.entries(customerCart).find(([k, v]) => {
+      if (k === prodId || k.startsWith(`${prodId}_`)) return true;
+      const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+      return vProdId === prodId;
+    });
+
+    const existingItem = existingEntry ? existingEntry[1] : null;
+
+    if (existingItem) {
+      const qty = typeof existingItem === 'object' ? existingItem.quantity : existingItem;
+      const unit = typeof existingItem === 'object' ? existingItem.unit : (prod.unit?.symbol || 'unit');
+      toast(`"${prod.name}" is already in this order (Qty: ${qty} ${unit}). Modifying item.`, { icon: 'ℹ️' });
+    }
+    setSelectedProductForPackaging(prod);
+  };
+
+  const handleAddWithPackaging = (packData) => {
+    const { product, name, sellingPrice, quantity, unit, packDetails } = packData;
+    const productId = product._id;
+
     setCustomerCart(prev => {
-      const curr = prev[id] || 0;
-      const next = Math.max(0, curr + delta);
-      if (next === 0) {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
+      // Remove any existing duplicate or variant entries for this base product
+      const nextCart = {};
+      let wasExisting = false;
+
+      for (const [k, v] of Object.entries(prev)) {
+        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        if (k === productId || vProdId === productId || k.startsWith(`${productId}_`)) {
+          wasExisting = true;
+        } else {
+          nextCart[k] = v;
+        }
       }
-      return { ...prev, [id]: next };
+
+      // Add strictly one updated entry for this product
+      nextCart[productId] = {
+        productId,
+        product,
+        name,
+        sellingPrice,
+        quantity,
+        unit,
+        packDetails,
+      };
+
+      if (wasExisting) {
+        toast.success(`Updated ${name} in order: ${quantity} ${unit} (₹${Math.round(sellingPrice * quantity)})`);
+      } else {
+        toast.success(`Added ${quantity} ${unit} of ${name} to order!`);
+      }
+
+      return nextCart;
     });
   };
 
-  const removeCartItem = (id) => {
+  const updateQty = (key, delta) => {
     setCustomerCart(prev => {
-      const copy = { ...prev };
-      delete copy[id];
+      // Find key or matching productId
+      const matchingKey = Object.keys(prev).find(k => {
+        if (k === key) return true;
+        const v = prev[k];
+        const vId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        return vId === key || k.startsWith(`${key}_`);
+      }) || key;
+
+      const item = prev[matchingKey];
+      if (item === undefined) return prev;
+      const currentQty = typeof item === 'object' ? (item.quantity || 1) : Number(item);
+      const nextQty = Math.max(0, currentQty + delta);
+      if (nextQty === 0) {
+        const copy = { ...prev };
+        delete copy[matchingKey];
+        return copy;
+      }
+      if (typeof item === 'object') {
+        return { ...prev, [matchingKey]: { ...item, quantity: nextQty } };
+      }
+      return { ...prev, [matchingKey]: nextQty };
+    });
+  };
+
+  const removeCartItem = (key) => {
+    setCustomerCart(prev => {
+      const copy = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
+        if (k !== key && vProdId !== key && !k.startsWith(`${key}_`)) {
+          copy[k] = v;
+        }
+      }
       return copy;
     });
   };
 
-  const cartEntries = Object.entries(customerCart);
-  const totalItemCount = cartEntries.reduce((sum, [, q]) => sum + q, 0);
-  const totalEstimatedAmount = cartEntries.reduce((sum, [id, qty]) => {
-    const prod = catalog.find(p => p._id === id);
-    return sum + ((prod?.sellingPrice || 0) * qty);
-  }, 0);
+  const getNormalizedCartItem = useCallback((key, val) => {
+    if (typeof val === 'object' && val !== null) {
+      const pId = val.productId || val.product?._id || key.split('_')[0] || key;
+      return {
+        key: pId,
+        productId: pId,
+        product: val.product || catalog.find(p => p._id === pId),
+        name: val.name || val.product?.name || 'Item',
+        sellingPrice: Number(val.sellingPrice || val.product?.sellingPrice || 0),
+        quantity: Number(val.quantity || 1),
+        unit: val.unit || val.product?.unit?.symbol || 'unit',
+      };
+    }
+    const baseKey = key.split('_')[0] || key;
+    const prod = catalog.find(p => p._id === baseKey);
+    return {
+      key: baseKey,
+      productId: baseKey,
+      product: prod,
+      name: prod?.name || 'Item',
+      sellingPrice: Number(prod?.sellingPrice || 0),
+      quantity: Number(val || 1),
+      unit: prod?.unit?.symbol || 'unit',
+    };
+  }, [catalog]);
+
+  const normalizedCartList = useMemo(() => {
+    const map = new Map();
+    Object.entries(customerCart).forEach(([k, v]) => {
+      const item = getNormalizedCartItem(k, v);
+      const uniqueId = item.productId || k.split('_')[0] || k;
+      // Deduplicate strictly: one entry per unique base product ID
+      map.set(uniqueId, { ...item, key: uniqueId, productId: uniqueId });
+    });
+    return Array.from(map.values());
+  }, [customerCart, getNormalizedCartItem]);
+
+  const totalItemCount = normalizedCartList.reduce((sum, item) => sum + item.quantity, 0);
+  const totalEstimatedAmount = normalizedCartList.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
 
   // Update order workflow status
   const handleUpdateStatus = async (orderId, newStatus) => {
@@ -190,31 +350,48 @@ export default function OrdersPage() {
     }
   };
 
+  // Update delivery charge on an existing order
+  const handleUpdateDeliveryFee = async (orderId, newFee) => {
+    try {
+      const feeNum = Math.max(0, Number(newFee) || 0);
+      await api.put(`/orders/${orderId}`, { deliveryCharge: feeNum });
+      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, deliveryCharge: feeNum } : o));
+      if (selectedOrderDetails?._id === orderId) {
+        setSelectedOrderDetails(prev => ({ ...prev, deliveryCharge: feeNum }));
+      }
+      setEditingDeliveryFee(false);
+      toast.success(`Updated delivery fee to ₹${feeNum}`);
+    } catch {
+      toast.error('Failed to update delivery fee');
+    }
+  };
+
   // Submit order from Admin
   const handlePlaceCustomerOrder = async (e) => {
     e.preventDefault();
     if (submitting) return;
-    if (cartEntries.length === 0) return toast.error('Cart is empty');
+    if (normalizedCartList.length === 0) return toast.error('Cart is empty');
     if (!customerInfo.name.trim()) return toast.error('Customer name is required');
     if (!customerInfo.mobile.trim()) return toast.error('Mobile number is required');
 
     setSubmitting(true);
     try {
-      const orderItems = cartEntries.map(([productId, quantity]) => {
-        const prod = catalog.find(p => p._id === productId);
-        return {
-          product: productId,
-          productName: prod?.name || 'Item',
-          quantity,
-          unit: prod?.unit?.symbol || 'unit',
-          notes: prod?.sellingPrice ? `₹${prod.sellingPrice}` : ''
-        };
-      });
+      const orderItems = normalizedCartList.map((item) => ({
+        product: item.productId,
+        productName: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: item.sellingPrice ? `₹${item.sellingPrice}` : ''
+      }));
+
+      const finalFee = adminDeliveryMode === 'pickup' ? 0 : Math.max(0, Number(adminDeliveryCharge) || 0);
+      const finalAddress = adminDeliveryMode === 'pickup' ? 'Store Pickup' : (customerInfo.address.trim() || 'Home Delivery');
 
       const res = await api.post('/orders', {
         customerName: customerInfo.name.trim(),
         customerMobile: customerInfo.mobile.trim(),
-        deliveryAddress: customerInfo.address.trim() || 'Store Pickup',
+        deliveryAddress: finalAddress,
+        deliveryCharge: finalFee,
         notes: customerInfo.notes.trim(),
         items: orderItems,
       });
@@ -244,6 +421,17 @@ export default function OrdersPage() {
           cart.addItem(prod, item.quantity);
         }
       });
+      if (order.deliveryCharge > 0) {
+        cart.addItem({
+          _id: 'delivery_charges_fee',
+          name: '🚚 Delivery Charges',
+          sellingPrice: order.deliveryCharge,
+          purchasePrice: 0,
+          mrp: order.deliveryCharge,
+          unit: 'trip',
+          currentStock: 999,
+        }, 1);
+      }
       toast.success(`Loaded Order #${order.orderNumber} into Billing POS!`);
       navigate('/pos');
     } catch (err) {
@@ -493,6 +681,7 @@ export default function OrdersPage() {
                     <th className="py-4 px-5">Order #</th>
                     <th className="py-4 px-5">Customer Name & Time</th>
                     <th className="py-4 px-5">Mobile</th>
+                    <th className="py-4 px-5 text-center">Delivery & Fee</th>
                     <th className="py-4 px-5 text-center">Items</th>
                     <th className="py-4 px-5 text-center">Order Status</th>
                     <th className="py-4 px-5 text-right">Actions</th>
@@ -501,7 +690,7 @@ export default function OrdersPage() {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-16 text-gray-400">
+                      <td colSpan={7} className="text-center py-16 text-gray-400">
                         <Package size={44} className="mx-auto mb-2 opacity-30 text-gray-300" />
                         <p className="font-bold text-base text-gray-700">
                           {queueTab === 'active' ? 'No active orders pending' : queueTab === 'completed' ? 'No completed orders in list' : 'No orders found'}
@@ -566,6 +755,23 @@ export default function OrdersPage() {
                           {/* Mobile */}
                           <td className="py-4 px-5 whitespace-nowrap text-sm text-gray-800 font-semibold">
                             +91 {ord.customerMobile || '-'}
+                          </td>
+
+                          {/* Delivery & Fee */}
+                          <td className="py-4 px-5 text-center whitespace-nowrap">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={clsx(
+                                'px-2.5 py-0.5 rounded-full text-xs font-bold border inline-flex items-center gap-1',
+                                ord.deliveryCharge > 0
+                                  ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                              )}>
+                                {ord.deliveryCharge > 0 ? `🚚 ₹${ord.deliveryCharge}` : '🏪 Free Pickup'}
+                              </span>
+                              <span className="text-[11px] text-gray-500 max-w-[130px] truncate" title={ord.deliveryAddress || 'Store Pickup'}>
+                                {ord.deliveryAddress || 'Store Pickup'}
+                              </span>
+                            </div>
                           </td>
 
                           {/* Clickable Items Pill (Opens full details modal) */}
@@ -696,6 +902,9 @@ export default function OrdersPage() {
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-gray-50/40">
+              {/* Live Engaging Status Tracker */}
+              <OrderStatusTracker order={selectedOrderDetails} />
+
               {/* Customer & Delivery Form Box */}
               <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-2xs space-y-3">
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-400">
@@ -711,12 +920,75 @@ export default function OrdersPage() {
                     <span className="font-bold text-gray-900">+91 {selectedOrderDetails.customerMobile || '-'}</span>
                   </div>
                   <div className="sm:col-span-2">
-                    <span className="text-gray-400 font-medium block">Delivery Address:</span>
-                    <p className="font-semibold text-gray-800 flex items-center gap-1.5 mt-0.5">
-                      <MapPin size={14} className="text-primary-600 shrink-0" />
-                      <span>{selectedOrderDetails.deliveryAddress || 'Store Pickup (Counter)'}</span>
-                    </p>
+                    <span className="text-gray-400 font-medium block">Delivery Address & Mode:</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-0.5">
+                      <p className="font-semibold text-gray-800 flex items-center gap-1.5">
+                        <MapPin size={14} className="text-primary-600 shrink-0" />
+                        <span>{selectedOrderDetails.deliveryAddress || 'Store Pickup (Counter)'}</span>
+                      </p>
+                      <span className={clsx(
+                        'px-2.5 py-0.5 rounded-md text-xs font-bold border',
+                        selectedOrderDetails.deliveryCharge > 0
+                          ? 'bg-amber-50 text-amber-900 border-amber-300'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      )}>
+                        {selectedOrderDetails.deliveryCharge > 0 ? '🚚 Home Delivery' : '🏪 Store Pickup'}
+                      </span>
+                    </div>
                   </div>
+
+                  <div>
+                    <span className="text-gray-400 font-medium block">Delivery Charges:</span>
+                    {editingDeliveryFee ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-sm font-bold text-gray-700">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tempDeliveryFee}
+                          onChange={e => setTempDeliveryFee(e.target.value)}
+                          className="w-20 form-input py-1 px-2 text-xs font-bold"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateDeliveryFee(selectedOrderDetails._id, tempDeliveryFee)}
+                          className="btn-primary py-1 px-2.5 text-xs font-bold cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingDeliveryFee(false)}
+                          className="btn-secondary py-1 px-2 text-xs font-medium cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-extrabold text-gray-900 text-base">
+                          ₹{selectedOrderDetails.deliveryCharge || 0}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempDeliveryFee(selectedOrderDetails.deliveryCharge || 0);
+                            setEditingDeliveryFee(true);
+                          }}
+                          className="text-[11px] text-primary-600 hover:text-primary-800 font-bold underline cursor-pointer"
+                        >
+                          Edit Fee
+                        </button>
+                        {selectedOrderDetails.deliveryCharge === 0 && (
+                          <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded">
+                            Free
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {selectedOrderDetails.notes && (
                     <div className="sm:col-span-2 bg-amber-50 rounded-xl p-3 border border-amber-200 text-xs text-amber-900">
                       <strong>Customer Notes:</strong> {selectedOrderDetails.notes}
@@ -747,6 +1019,16 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Subtotal & Delivery Fee Breakdown */}
+                <div className="p-4 bg-gray-50/80 border-t border-gray-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-gray-600">
+                    <span>Delivery Charges:</span>
+                    <span className={clsx('font-bold', selectedOrderDetails.deliveryCharge > 0 ? 'text-amber-900' : 'text-emerald-700')}>
+                      {selectedOrderDetails.deliveryCharge > 0 ? `₹${selectedOrderDetails.deliveryCharge}` : 'FREE (₹0)'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -844,16 +1126,23 @@ export default function OrdersPage() {
                 {categories.map(cat => {
                   const iconMap = {
                     'all': '🛍️',
+                    'food & staples': '🍚',
+                    'beverages & dairy': '🥤',
+                    'snacks & biscuits': '🍿',
+                    'personal & household care': '🧼',
                     'food': '🍚',
                     'beverages': '🥤',
                     'snacks': '🍿',
-                    'household': '🧼'
+                    'household': '🧼',
                   };
                   const icon = iconMap[cat.toLowerCase()] || '📦';
                   return (
                     <button
                       key={cat}
-                      onClick={() => setSelectedCategory(cat)}
+                      onClick={() => {
+                        setSelectedCategory(cat);
+                        setSelectedSubCategory('all');
+                      }}
                       className={clsx(
                         'px-4 py-2 rounded-xl font-bold whitespace-nowrap capitalize transition-all shrink-0 flex items-center gap-1.5 cursor-pointer',
                         selectedCategory.toLowerCase() === cat.toLowerCase()
@@ -867,6 +1156,14 @@ export default function OrdersPage() {
                   );
                 })}
               </div>
+
+              {/* Subcategory Swipe Bar with arrows and mouse dragging */}
+              <SubcategorySwipeBar
+                subCategories={subCategories}
+                selectedSubCategory={selectedSubCategory}
+                onSelectSubCategory={setSelectedSubCategory}
+                colorScheme="emerald"
+              />
             </div>
 
             <div className="flex justify-between items-center px-1">
@@ -880,48 +1177,62 @@ export default function OrdersPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {filteredProducts.map(prod => {
-                const count = customerCart[prod._id] || 0;
+                const inCartItem = customerCart[prod._id];
+                const inCartQty = inCartItem ? (typeof inCartItem === 'object' ? inCartItem.quantity : inCartItem) : 0;
+                const catName = getProductCategory(prod);
+                const subCatName = getProductSubcategory(prod);
+                const subIcon = SUBCATEGORY_ICONS[subCatName.toLowerCase()] || '🏷️';
+
                 return (
                   <div
                     key={prod._id}
+                    onClick={() => handleOpenPackaging(prod)}
                     className={clsx(
-                      'card p-4 flex items-center justify-between border transition-all',
-                      count > 0 ? 'border-primary-400 bg-primary-50/20 shadow-xs' : 'hover:border-gray-300'
+                      'card p-4 flex items-center justify-between border transition-all cursor-pointer hover:shadow-md group',
+                      inCartQty > 0 ? 'border-amber-400 bg-amber-50/20 shadow-xs hover:border-amber-500' : 'hover:border-primary-400'
                     )}
                   >
                     <div className="min-w-0 flex-1 pr-2">
-                      <p className="font-bold text-sm text-gray-900 truncate leading-snug">{prod.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {prod.category?.name || 'Grocery'} · Stock: {prod.currentStock}
-                      </p>
+                      <p className="font-bold text-sm text-gray-900 group-hover:text-primary-700 truncate leading-snug">{prod.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <span className="text-[10px] bg-gray-100 text-gray-700 font-semibold px-2 py-0.5 rounded-md shrink-0">
+                          {catName}
+                        </span>
+                        <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                          <span>{subIcon}</span>
+                          <span>{subCatName}</span>
+                        </span>
+                        <span className="text-xs text-gray-400">· Stock: {prod.currentStock}</span>
+                      </div>
                       <p className="text-base font-extrabold text-primary-700 mt-1">
                         ₹{prod.sellingPrice} <span className="text-xs font-normal text-gray-400">/{prod.unit?.symbol || 'unit'}</span>
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => updateQty(prod._id, -1)}
-                        disabled={count === 0}
-                        className={clsx(
-                          'w-8 h-8 rounded-lg flex items-center justify-center font-bold transition-all cursor-pointer',
-                          count > 0 ? 'bg-white text-gray-700 hover:bg-gray-100 shadow-xs' : 'text-gray-300 cursor-not-allowed'
-                        )}
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span className={clsx('w-7 text-center font-extrabold text-sm', count > 0 ? 'text-primary-800' : 'text-gray-400')}>
-                        {count}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateQty(prod._id, 1)}
-                        className="w-8 h-8 bg-primary-600 text-white rounded-lg flex items-center justify-center font-bold hover:bg-primary-700 shadow-xs cursor-pointer"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenPackaging(prod);
+                      }}
+                      className={clsx(
+                        'btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center',
+                        inCartQty > 0
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                          : 'btn-primary'
+                      )}
+                    >
+                      {inCartQty > 0 ? (
+                        <>
+                          <span>✏️ In Cart: {inCartQty}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={14} />
+                          <span>Add / Packs</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 );
               })}
@@ -936,46 +1247,44 @@ export default function OrdersPage() {
                   <ShoppingCart size={19} className="text-primary-600" />
                   <h3 className="font-bold text-base text-gray-900">Your Grocery Cart</h3>
                 </div>
-                {cartEntries.length > 0 && (
+                {normalizedCartList.length > 0 && (
                   <span className="badge-green">{totalItemCount} items</span>
                 )}
               </div>
 
               {/* Cart Items List */}
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {cartEntries.length === 0 ? (
+                {normalizedCartList.length === 0 ? (
                   <div className="text-center py-6 text-gray-400">
                     <p className="text-xs">Your cart is empty. Add grocery products from the left.</p>
                   </div>
                 ) : (
-                  cartEntries.map(([id, qty]) => {
-                    const prod = catalog.find(p => p._id === id);
-                    const price = prod?.sellingPrice || 0;
-                    const itemTotal = price * qty;
-                    const unitSymbol = prod?.unit?.symbol || '';
+                  normalizedCartList.map((item) => {
+                    const price = item.sellingPrice || 0;
+                    const itemTotal = price * item.quantity;
                     return (
-                      <div key={id} className="p-2.5 rounded-xl bg-gray-50/90 border border-gray-100 flex justify-between items-center text-xs gap-2">
+                      <div key={item.key} className="p-2.5 rounded-xl bg-gray-50/90 border border-gray-100 flex justify-between items-center text-xs gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-gray-800 truncate leading-snug">{prod?.name}</p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">₹{price} {unitSymbol ? `/ ${unitSymbol}` : ''}</p>
+                          <p className="font-semibold text-gray-800 truncate leading-snug">{item.name}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">₹{price} / {item.unit}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {/* In-Cart Steppers */}
                           <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-gray-200 shadow-2xs">
                             <button
                               type="button"
-                              onClick={() => updateQty(id, -1)}
+                              onClick={() => updateQty(item.key, -1)}
                               className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
                               title="Decrease quantity"
                             >
                               <Minus size={11} />
                             </button>
                             <span className="w-5 text-center font-extrabold text-xs text-primary-800">
-                              {qty}
+                              {item.quantity}
                             </span>
                             <button
                               type="button"
-                              onClick={() => updateQty(id, 1)}
+                              onClick={() => updateQty(item.key, 1)}
                               className="w-6 h-6 rounded-md bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center font-bold shadow-2xs transition-colors cursor-pointer"
                               title="Increase quantity"
                             >
@@ -986,7 +1295,7 @@ export default function OrdersPage() {
                           <span className="font-bold text-primary-700 w-11 text-right">₹{itemTotal}</span>
                           <button
                             type="button"
-                            onClick={() => removeCartItem(id)}
+                            onClick={() => removeCartItem(item.key)}
                             className="text-gray-300 hover:text-red-500 p-1 transition-colors cursor-pointer"
                             title="Remove item"
                           >
@@ -999,10 +1308,64 @@ export default function OrdersPage() {
                 )}
               </div>
 
-              {cartEntries.length > 0 && (
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-sm font-bold">
-                  <span className="text-gray-600">Estimated Total:</span>
-                  <span className="text-primary-700 text-base">₹{totalEstimatedAmount}</span>
+              {/* Delivery Mode Selector */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 block">
+                  Delivery Method:
+                </span>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminDeliveryMode('delivery');
+                      if (Number(adminDeliveryCharge) === 0) setAdminDeliveryCharge(30);
+                    }}
+                    className={clsx(
+                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer',
+                      adminDeliveryMode === 'delivery'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                        : 'text-gray-500 hover:text-gray-800'
+                    )}
+                  >
+                    <span>🚚 Home Delivery</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminDeliveryMode('pickup');
+                      setAdminDeliveryCharge(0);
+                    }}
+                    className={clsx(
+                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer',
+                      adminDeliveryMode === 'pickup'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
+                        : 'text-gray-500 hover:text-gray-800'
+                    )}
+                  >
+                    <span>🏪 Store Pickup</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Subtotal & Delivery Breakdown */}
+              {normalizedCartList.length > 0 && (
+                <div className="pt-2 border-t border-gray-100 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-gray-600">
+                    <span>Items Subtotal:</span>
+                    <span className="font-bold text-gray-800">₹{totalEstimatedAmount}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-600">
+                    <span>Delivery Charges:</span>
+                    <span className={clsx('font-bold', (adminDeliveryMode === 'pickup' ? 0 : Number(adminDeliveryCharge) || 0) > 0 ? 'text-gray-900' : 'text-emerald-700')}>
+                      {adminDeliveryMode === 'pickup' ? 'FREE (₹0)' : `₹${Number(adminDeliveryCharge) || 0}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-black pt-1.5 border-t border-dashed border-gray-200 text-gray-900">
+                    <span>Total Payable:</span>
+                    <span className="text-base text-primary-700">
+                      ₹{totalEstimatedAmount + (adminDeliveryMode === 'pickup' ? 0 : (Number(adminDeliveryCharge) || 0))}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -1030,15 +1393,35 @@ export default function OrdersPage() {
                     onChange={e => setCustomerInfo(i => ({ ...i, mobile: e.target.value.replace(/\D/g, '') }))}
                   />
                 </div>
-                <div>
-                  <label className="form-label text-xs">Delivery Address</label>
-                  <input
-                    className="form-input"
-                    placeholder="Door No, Street name"
-                    value={customerInfo.address}
-                    onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
-                  />
-                </div>
+                {adminDeliveryMode === 'delivery' ? (
+                  <>
+                    <div>
+                      <label className="form-label text-xs">Delivery Address *</label>
+                      <input
+                        className="form-input"
+                        required
+                        placeholder="Door No, Street name, Landmark"
+                        value={customerInfo.address}
+                        onChange={e => setCustomerInfo(i => ({ ...i, address: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs">Delivery Charges (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="form-input"
+                        placeholder="30"
+                        value={adminDeliveryCharge}
+                        onChange={e => setAdminDeliveryCharge(e.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
+                    📍 <b>Counter Pickup:</b> Customer collects order in store.
+                  </div>
+                )}
                 <div>
                   <label className="form-label text-xs">Special Notes</label>
                   <input
@@ -1051,7 +1434,7 @@ export default function OrdersPage() {
 
                 <button
                   type="submit"
-                  disabled={submitting || cartEntries.length === 0}
+                  disabled={submitting || normalizedCartList.length === 0}
                   className="btn-primary w-full py-3.5 text-sm font-bold mt-2 gap-2 shadow-md cursor-pointer"
                 >
                   <CheckCircle size={16} />
@@ -1061,6 +1444,16 @@ export default function OrdersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Packaging & Quantity Modal */}
+      {selectedProductForPackaging && (
+        <QuantityPackagingModal
+          product={selectedProductForPackaging}
+          existingCartItem={customerCart[selectedProductForPackaging._id]}
+          onConfirm={handleAddWithPackaging}
+          onClose={() => setSelectedProductForPackaging(null)}
+        />
       )}
     </div>
   );

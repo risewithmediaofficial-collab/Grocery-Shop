@@ -135,7 +135,7 @@ Hello *${customerName}*, your grocery order has been received! 🙏
 📋 *Order Details:*
 • *Order ID:* #${orderNum}
 • *Status:* ⏳ Received & Under Review
-• *Delivery to:* ${address}
+• *Delivery to:* ${address}${order.deliveryCharge > 0 ? `\n• *Delivery Charges:* ₹${order.deliveryCharge}` : ''}
 
 🛍️ *Items Ordered:*
 ${itemsList}
@@ -220,25 +220,50 @@ async function sendSaleInvoiceAutoMessage(sale) {
   const total = Number(sale.grandTotal || 0).toLocaleString('en-IN');
   const paymentMethod = sale.paymentMethod?.toUpperCase() || 'CASH';
 
+  const totalMRP = (sale.items || []).reduce((sum, it) => sum + ((it.mrp || it.sellingPrice || 0) * (it.quantity || 1)), 0);
+  const mrpSavings = Math.max(0, totalMRP - (sale.subtotal || 0));
+  const billDiscount = Number(sale.totalDiscount || 0);
+  const totalSaved = mrpSavings + billDiscount;
+  const totalOriginalVal = totalMRP + (sale.totalTax || 0);
+  const savingsPct = totalOriginalVal > 0 && totalSaved > 0
+    ? ((totalSaved / totalOriginalVal) * 100).toFixed(1)
+    : '0';
+  const discountPct = (sale.subtotal && sale.subtotal > 0 && billDiscount > 0)
+    ? ((billDiscount / sale.subtotal) * 100).toFixed(1)
+    : '0';
+
   const itemsList = (sale.items || []).map((it, idx) => {
     const name = it.productName || 'Item';
     const qty = it.quantity || 1;
+    const unit = it.unit ? ` ${it.unit}` : '';
     const price = it.sellingPrice || 0;
-    return `${idx + 1}. *${name}* × ${qty} (₹${price * qty})`;
+    const mrpStr = it.mrp > it.sellingPrice ? ` _(MRP ₹${it.mrp})_` : '';
+    return `${idx + 1}. *${name}* × ${qty}${unit} = *₹${(price * qty).toLocaleString('en-IN')}*${mrpStr}`;
   }).join('\n');
 
-  const text = `🧾 *${STORE_CONFIG.name} - Digital Invoice*
+  let savingsText = '';
+  if (totalSaved > 0) {
+    savingsText = `\n🎉 *YOU SAVED: ₹${Number(totalSaved).toLocaleString('en-IN')} (${savingsPct}%) ON THIS PURCHASE!* 🌟\n`;
+  }
+  let discountText = '';
+  if (billDiscount > 0) {
+    discountText = `🏷️ *Discount (${discountPct}%):* -₹${Number(billDiscount).toLocaleString('en-IN')}\n`;
+  }
+
+  const text = `🧾 *${STORE_CONFIG.name} - Digital Tax Invoice*
 📍 _${STORE_CONFIG.location}_
 
 Hello *${customerName}*, here is your grocery purchase receipt:
 
 📄 *Invoice #:* ${invoiceNum}
-💰 *Grand Total:* ₹${total}
-💳 *Paid Via:* ${paymentMethod}
-
 🛍️ *Purchased Items:*
 ${itemsList}
 
+💵 *Subtotal:* ₹${Number(sale.subtotal || 0).toLocaleString('en-IN')}
+${discountText}📊 *GST Tax:* ₹${Number(sale.totalTax || 0).toLocaleString('en-IN')}
+💰 *Grand Total:* *₹${total}*
+💳 *Paid Via:* ${paymentMethod}
+${savingsText}
 📞 *Store Contact:* ${STORE_CONFIG.phone}
 Thank you for shopping with *${STORE_CONFIG.name}*! 🙏`;
 

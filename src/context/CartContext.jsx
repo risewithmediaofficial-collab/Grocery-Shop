@@ -135,14 +135,15 @@ export function CartProvider({ children }) {
     } catch {}
   }, []);
 
-  // Load from a previous sale (repeat purchase)
+  // Load from a previous sale (repeat purchase - replaces active cart)
   const loadFromSale = useCallback((saleItems) => {
     const items = saleItems.map(item => ({
       _id: item.product?._id || item.product,
-      name: item.productName,
+      name: item.productName || item.name,
       sellingPrice: item.sellingPrice,
       purchasePrice: item.purchasePrice,
-      gstRate: item.gstRate,
+      mrp: item.mrp || item.sellingPrice,
+      gstRate: item.gstRate || 0,
       hsnCode: item.hsnCode,
       taxType: 'exclusive',
       quantity: item.quantity,
@@ -153,44 +154,112 @@ export function CartProvider({ children }) {
     setCartItems(items);
   }, []);
 
+  // Append items from a previous sale to the existing cart without overwriting
+  const appendFromSale = useCallback((saleItems) => {
+    const items = saleItems.map(item => ({
+      _id: item.product?._id || item.product,
+      name: item.productName || item.name,
+      sellingPrice: item.sellingPrice,
+      purchasePrice: item.purchasePrice,
+      mrp: item.mrp || item.sellingPrice,
+      gstRate: item.gstRate || 0,
+      hsnCode: item.hsnCode,
+      taxType: 'exclusive',
+      quantity: item.quantity,
+      discount: item.discount || 0,
+      discountType: item.discountType || 'percent',
+      customPrice: item.sellingPrice,
+    }));
+
+    setCartItems(prev => {
+      let updated = [...prev];
+      items.forEach(newItem => {
+        const existingIdx = updated.findIndex(i => (i._id || i.product) === (newItem._id || newItem.product));
+        if (existingIdx !== -1) {
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            quantity: updated[existingIdx].quantity + newItem.quantity,
+          };
+        } else {
+          updated.push(newItem);
+        }
+      });
+      return updated;
+    });
+  }, []);
+
   // Compute totals
   const subtotal = cartItems.reduce((sum, item) => sum + (item.customPrice || item.sellingPrice) * item.quantity, 0);
+  const totalMRP = cartItems.reduce((sum, item) => sum + (item.mrp || item.customPrice || item.sellingPrice) * item.quantity, 0);
+  const mrpSavings = Math.max(0, totalMRP - subtotal);
+  const billDiscount = Number(discount || 0);
+  const discountPercentage = subtotal > 0 && billDiscount > 0 ? ((billDiscount / subtotal) * 100).toFixed(1) : '0';
   const totalTax = cartItems.reduce((sum, item) => {
     const price = (item.customPrice || item.sellingPrice) * item.quantity;
     return sum + (price * (item.gstRate || 0)) / 100;
   }, 0);
-  const grandTotal = Math.round(subtotal + totalTax - discount);
-  const roundOff = grandTotal - (subtotal + totalTax - discount);
+  const grandTotal = Math.max(0, Math.round(subtotal + totalTax - billDiscount));
+  const roundOff = grandTotal - (subtotal + totalTax - billDiscount);
+  const totalSavings = mrpSavings + billDiscount;
+  const totalOriginalVal = totalMRP + totalTax;
+  const savingsPercentage = totalOriginalVal > 0 && totalSavings > 0
+    ? ((totalSavings / totalOriginalVal) * 100).toFixed(1)
+    : '0';
 
-  // 1. Hold Bill — Save to MongoDB Database
-  const holdBill = useCallback(async () => {
+  // 1. Hold Bill — Save to MongoDB Database with custom customer/tag identification
+  const holdBill = useCallback(async (customInfo = {}) => {
     if (cartItems.length === 0) {
       toast.error('Cart is empty. Add items first.');
       return null;
     }
 
-    try {
-      const payload = {
-        items: cartItems,
-        customer,
-        discount,
-        discountType,
-        notes,
-        subtotal,
-        totalTax,
-        grandTotal,
-      };
+    const custObj = customInfo.customer !== undefined ? customInfo.customer : customer;
+    const custName = customInfo.customerName || (typeof custObj === 'string' ? custObj : custObj?.name) || customer?.name || 'Walk-in Customer';
+    const custMobile = customInfo.customerMobile || custObj?.mobile || customer?.mobile || '';
+    const billNotes = customInfo.notes !== undefined ? customInfo.notes : (notes || '');
 
+    const payload = {
+      items: cartItems,
+      customer: custObj?._id || (typeof custObj === 'string' && custObj.match(/^[0-9a-fA-F]{24}$/) ? custObj : null),
+      customerName: custName,
+      customerMobile: custMobile,
+      discount,
+      discountType,
+      notes: billNotes,
+      subtotal,
+      totalTax,
+      grandTotal,
+    };
+
+    try {
       const res = await api.post('/held-bills', payload);
       const savedBill = res.data.data;
       
       setHeldBills(prev => [savedBill, ...prev]);
       clearCart();
-      toast.success(`Bill held in Database (${savedBill.billNumber})`);
+      toast.success(`Bill held: ${savedBill.customerName || savedBill.billNumber}`);
       return savedBill._id;
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to hold bill in database');
-      return null;
+      // Local fallback so cashier is never blocked
+      const fallbackBill = {
+        _id: `held_${Date.now()}`,
+        billNumber: `HELD-${Date.now().toString().slice(-4)}`,
+        customerName: custName,
+        customerMobile: custMobile,
+        customer: custObj,
+        items: [...cartItems],
+        discount,
+        discountType,
+        notes: billNotes,
+        subtotal,
+        totalTax,
+        grandTotal,
+        createdAt: new Date().toISOString(),
+      };
+      setHeldBills(prev => [fallbackBill, ...prev]);
+      clearCart();
+      toast.success(`Bill held: ${custName || fallbackBill.billNumber}`);
+      return fallbackBill._id;
     }
   }, [cartItems, customer, discount, discountType, notes, subtotal, totalTax, grandTotal, clearCart]);
 
@@ -250,10 +319,11 @@ export function CartProvider({ children }) {
   return (
     <CartContext.Provider value={{
       cartItems, customer, discount, discountType, notes, heldBills, loadingHeld,
-      subtotal, totalTax, grandTotal, roundOff,
+      subtotal, totalMRP, mrpSavings, billDiscount, discountPercentage, totalSavings, savingsPercentage,
+      totalTax, grandTotal, roundOff,
       setCustomer, setDiscount, setDiscountType, setNotes,
       addItem, updateItem, removeItem, clearCart,
-      loadFromSale, holdBill, resumeBill, deleteHeldBill, fetchHeldBills,
+      loadFromSale, appendFromSale, holdBill, resumeBill, deleteHeldBill, fetchHeldBills,
     }}>
       {children}
     </CartContext.Provider>

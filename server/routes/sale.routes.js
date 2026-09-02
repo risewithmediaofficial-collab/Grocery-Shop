@@ -137,7 +137,7 @@ router.post('/', protect, async (req, res) => {
         unit: product.unit?.symbol || '',
         purchasePrice: product.purchasePrice,
         sellingPrice: item.sellingPrice || product.sellingPrice,
-        mrp: product.mrp,
+        mrp: item.mrp || product.mrp || (item.sellingPrice || product.sellingPrice),
         discount: item.discount || 0,
         discountType: item.discountType || 'percent',
         taxableAmount: gst.taxableAmount,
@@ -149,9 +149,11 @@ router.post('/', protect, async (req, res) => {
       });
     }
 
-    const grandTotalRaw = totalTaxableAmount + totalTax;
+    const billDiscount = Number(discount || 0);
+    totalDiscount += billDiscount;
+    const grandTotalRaw = Math.max(0, totalTaxableAmount + totalTax - billDiscount);
     const grandTotal = Math.round(grandTotalRaw);
-    const roundOff = grandTotal - grandTotalRaw;
+    const roundOff = grandTotal - (totalTaxableAmount + totalTax - billDiscount);
 
     const isCredit = paymentMethod === 'credit' || (amountPaid < grandTotal);
     const amountDue = grandTotal - (amountPaid || 0);

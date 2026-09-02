@@ -64,15 +64,12 @@ describe('Express Backend API Endpoints (Supertest)', () => {
     });
 
     it('GET /api/orders/catalog returns active public product catalog', async () => {
-      vi.spyOn(Product, 'find').mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            sort: vi.fn().mockResolvedValue([
-              { _id: '60d5ec49f1b2c8b1f8e4e1a1', name: 'Ponni Rice 25kg', sellingPrice: 1450, currentStock: 20 },
-            ]),
-          }),
-        }),
-      });
+      const queryMock = {};
+      queryMock.populate = vi.fn().mockReturnValue(queryMock);
+      queryMock.sort = vi.fn().mockResolvedValue([
+        { _id: '60d5ec49f1b2c8b1f8e4e1a1', name: 'Ponni Rice 25kg', sellingPrice: 1450, currentStock: 20 },
+      ]);
+      vi.spyOn(Product, 'find').mockReturnValue(queryMock);
       const res = await request(app).get('/api/orders/catalog');
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);

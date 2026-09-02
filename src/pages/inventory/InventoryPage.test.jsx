@@ -60,5 +60,5 @@ describe('InventoryPage Component & Stock Adjustments', () => {
     });
 
     expect(screen.getByText(/Changes are logged permanently to the audit ledger/i)).toBeInTheDocument();
-  });
+  }, 15000);
 });

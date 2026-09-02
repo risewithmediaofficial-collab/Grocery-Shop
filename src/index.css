@@ -27,6 +27,16 @@
     @apply outline-none;
   }
 
+  /* Disable number input spin buttons */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
@@ -210,4 +220,180 @@
     .print-only { display: block !important; }
   }
   .print-only { display: none; }
+}
+
+/* Order Live Tracking Animations - Premium Compact Tri-Color Palette */
+@keyframes delivery-travel {
+  0% {
+    left: 36px;
+    opacity: 0;
+    transform: translateY(-50%) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  80% {
+    left: calc(100% - 68px);
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  90% {
+    left: calc(100% - 60px);
+    opacity: 0.6;
+    transform: translateY(-50%) scale(0.95);
+  }
+  98% {
+    opacity: 0;
+    left: calc(100% - 54px);
+  }
+  100% {
+    left: 36px;
+    opacity: 0;
+  }
+}
+
+@keyframes road-dash-move {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 32px 0;
+  }
+}
+
+@keyframes pin-ripple {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes box-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes item-hop-1 {
+  0% {
+    transform: translate(-20px, -14px) scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    transform: translate(-8px, -10px) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(0, 0) scale(0.7);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(0, 4px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes item-hop-2 {
+  0% {
+    transform: translate(20px, -14px) scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    transform: translate(8px, -10px) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(0, 0) scale(0.7);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(0, 4px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes bell-ring {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(10deg);
+  }
+  50% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes float-sparkle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-delivery-travel {
+  animation: delivery-travel 3.8s cubic-bezier(0.35, 0.1, 0.25, 1) infinite;
+}
+
+.animate-road-dash {
+  background-image: repeating-linear-gradient(90deg, #94a3b8 0, #94a3b8 8px, transparent 8px, transparent 16px);
+  background-size: 32px 2px;
+  animation: road-dash-move 1s linear infinite;
+}
+
+.animate-pin-ripple {
+  animation: pin-ripple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.animate-box-bounce {
+  animation: box-bounce 1.6s ease-in-out infinite;
+}
+
+.animate-item-hop-1 {
+  animation: item-hop-1 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.animate-item-hop-2 {
+  animation: item-hop-2 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite 1.2s;
+}
+
+.animate-bell-ring {
+  animation: bell-ring 2.2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-float-sparkle {
+  animation: float-sparkle 2.2s ease-in-out infinite;
 }

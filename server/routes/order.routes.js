@@ -15,8 +15,7 @@ const whatsappService = require('../services/whatsapp.service');
 router.get('/catalog', async (req, res) => {
   try {
     const products = await Product.find({ status: 'active' })
-      .populate('category', 'name')
-      .populate('unit', 'name symbol')
+      .populate('category subCategory brand unit')
       .sort({ name: 1 });
     res.json({ success: true, data: products });
   } catch (err) {
@@ -55,7 +54,7 @@ router.get('/:id', async (req, res) => {
 // POST place order (customer submission with customer database linking)
 router.post('/', async (req, res) => {
   try {
-    const { customerName, customerMobile, deliveryAddress, items, notes, customerId } = req.body;
+    const { customerName, customerMobile, deliveryAddress, items, notes, customerId, deliveryCharge } = req.body;
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Please add items to your grocery cart' });
     }
@@ -95,6 +94,7 @@ router.post('/', async (req, res) => {
       items,
       notes,
       status: 'pending',
+      deliveryCharge: Math.max(0, Number(deliveryCharge) || 0),
     });
 
     // Update customer stats
@@ -123,6 +123,31 @@ router.post('/', async (req, res) => {
       data: order,
       message: 'Your grocery order has been received! Our store staff will pack your order shortly.'
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/orders/:id — update order details (e.g. delivery charge, address, notes)
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const { deliveryCharge, deliveryAddress, notes, customerName, customerMobile } = req.body;
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    if (deliveryCharge !== undefined) {
+      order.deliveryCharge = Math.max(0, Number(deliveryCharge) || 0);
+    }
+    if (deliveryAddress !== undefined) order.deliveryAddress = deliveryAddress.trim();
+    if (notes !== undefined) order.notes = notes;
+    if (customerName) order.customerName = customerName.trim();
+    if (customerMobile) order.customerMobile = customerMobile.trim();
+
+    order.lastUpdatedBy = req.user.name || 'Staff';
+    order.lastUpdatedByRole = req.user.role || 'staff';
+
+    await order.save();
+    res.json({ success: true, data: order, message: 'Order details updated successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

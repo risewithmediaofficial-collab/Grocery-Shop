@@ -40,7 +40,7 @@ Hello *${customerName}*, thank you for placing your grocery order with us! 🙏
 📋 *Order Details:*
 • *Order ID:* #${orderNum}
 • *Status:* ⏳ Received & Under Review
-• *Delivery to:* ${address}
+• *Delivery to:* ${address}${order.deliveryCharge > 0 ? `\n• *Delivery Charges:* ₹${order.deliveryCharge}` : ''}
 
 🛍️ *Items Ordered:*
 ${itemsText}

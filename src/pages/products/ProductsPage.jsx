@@ -34,7 +34,7 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
     name: '', sku: '', barcode: '', category: defaultCategory, subCategory: '', brand: '', unit: '',
     purchasePrice: '', sellingPrice: '', mrp: '', wholesalePrice: '',
     hsnCode: '', gstRate: 5, taxType: 'exclusive',
-    openingStock: 0, minimumStock: 10, reorderLevel: 15, maximumStock: 100,
+    openingStock: 0, minimumStock: 0, reorderLevel: 0, maximumStock: 0,
     batchTracking: false, expiryTracking: false, status: 'active',
   });
   const [subCategories, setSubCategories] = useState([]);
@@ -60,6 +60,19 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
     const profit = sell - buy;
     return { margin: margin.toFixed(1), profit: profit.toFixed(2) };
   }, [form.purchasePrice, form.sellingPrice]);
+
+  const discountInfo = useMemo(() => {
+    const mrp = parseFloat(form.mrp) || 0;
+    const sell = parseFloat(form.sellingPrice) || 0;
+    if (mrp <= 0 || sell <= 0) return null;
+    if (sell < mrp) {
+      const discountAmt = mrp - sell;
+      const discountPct = ((discountAmt / mrp) * 100).toFixed(1);
+      return { discountAmt: discountAmt.toFixed(2), discountPct, type: 'discount' };
+    }
+    if (sell === mrp) return { type: 'equal' };
+    return { type: 'warning', diff: (sell - mrp).toFixed(2) };
+  }, [form.mrp, form.sellingPrice]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -90,7 +103,7 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 bg-gradient-to-r from-gray-50 to-white">
           <div>
             <h2 className="font-extrabold text-lg text-gray-900">{product ? 'Edit Product' : 'Add New Grocery Product'}</h2>
-            <p className="text-xs text-gray-500">Structured inventory data entry & pricing</p>
+            <p className="text-xs text-gray-500">Structured inventory data entry, MRP & Selling Price</p>
           </div>
           <button
             type="button"
@@ -193,25 +206,60 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
             </div>
           </div>
 
-          {/* Section 2: Pricing & Profit Margin */}
+          {/* Section 2: Pricing, MRP & Selling Price Options */}
           <div className="pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider flex items-center gap-1.5">
-                <span>💰 2. Pricing & Margins</span>
+                <span>💰 2. MRP & Selling Price Options</span>
               </h3>
-              {profitMargin && (
-                <span className={clsx(
-                  'text-xs font-bold px-2 py-0.5 rounded-full border',
-                  parseFloat(profitMargin.margin) >= 15 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                )}>
-                  Margin: {profitMargin.margin}% (+₹{profitMargin.profit})
-                </span>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {profitMargin && (
+                  <span className={clsx(
+                    'text-xs font-bold px-2.5 py-0.5 rounded-full border',
+                    parseFloat(profitMargin.margin) >= 15 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                  )}>
+                    Margin: {profitMargin.margin}% (+₹{profitMargin.profit})
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="form-label text-xs">Purchase Price (₹) *</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="flex flex-col">
+                <label className="form-label text-xs font-bold text-gray-700 h-6 flex items-center">
+                  MRP (Printed Price ₹) *
+                </label>
+                <input
+                  className="form-input font-bold text-gray-800"
+                  type="number"
+                  step="0.01"
+                  value={form.mrp}
+                  onChange={e => set('mrp', e.target.value)}
+                  placeholder="e.g. 120.00"
+                />
+                <span className="text-[11px] text-gray-400 mt-1">Max Retail Price</span>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="form-label text-xs font-bold text-primary-900 h-6 flex items-center">
+                  Selling Price (POS Rate ₹) *
+                </label>
+                <input
+                  className="form-input font-extrabold text-primary-700 bg-primary-50/40 border-primary-400 focus:border-primary-600 focus:ring-primary-500"
+                  type="number"
+                  step="0.01"
+                  required
+                  value={form.sellingPrice}
+                  onChange={e => set('sellingPrice', e.target.value)}
+                  placeholder="e.g. 110.00"
+                />
+                <span className="text-[11px] text-primary-600 font-medium mt-1">Billed to customer</span>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="form-label text-xs font-bold text-gray-700 h-6 flex items-center">
+                  Purchase / Cost Price (₹) *
+                </label>
                 <input
                   className="form-input font-semibold"
                   type="number"
@@ -219,47 +267,33 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
                   required
                   value={form.purchasePrice}
                   onChange={e => set('purchasePrice', e.target.value)}
-                  placeholder="0.00"
+                  placeholder="e.g. 90.00"
                 />
-              </div>
-
-              <div>
-                <label className="form-label text-xs font-bold text-primary-900">Selling Price (₹) *</label>
-                <input
-                  className="form-input font-bold text-primary-700 bg-primary-50/30 border-primary-300"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={form.sellingPrice}
-                  onChange={e => set('sellingPrice', e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="form-label text-xs">MRP (₹)</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  step="0.01"
-                  value={form.mrp}
-                  onChange={e => set('mrp', e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="form-label text-xs">Wholesale Price (₹)</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  step="0.01"
-                  value={form.wholesalePrice}
-                  onChange={e => set('wholesalePrice', e.target.value)}
-                  placeholder="0.00"
-                />
+                <span className="text-[11px] text-gray-400 mt-1">Store buying cost</span>
               </div>
             </div>
+
+            {/* Live Discount & Customer Savings Badge */}
+            {discountInfo && (
+              <div className="mt-2.5 p-2.5 rounded-xl border text-xs flex items-center justify-between">
+                {discountInfo.type === 'discount' && (
+                  <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 border-emerald-200 w-full p-2 rounded-lg font-semibold">
+                    <span className="text-base">🎉</span>
+                    <span>Customer Discount: <strong>₹{discountInfo.discountAmt}</strong> per unit ({discountInfo.discountPct}% OFF MRP)</span>
+                  </div>
+                )}
+                {discountInfo.type === 'equal' && (
+                  <div className="text-gray-600 bg-gray-50 border-gray-200 w-full p-2 rounded-lg font-medium">
+                    <span>🏷️ Selling at standard MRP (₹{form.mrp}) · 0% discount</span>
+                  </div>
+                )}
+                {discountInfo.type === 'warning' && (
+                  <div className="text-amber-800 bg-amber-50 border-amber-200 w-full p-2 rounded-lg font-medium">
+                    <span>⚠️ Selling price exceeds MRP by ₹{discountInfo.diff}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Section 3: GST & Tax */}
@@ -288,32 +322,43 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
             </div>
           </div>
 
-          {/* Section 4: Stock & Inventory Limits */}
+          {/* Section 4: Stock & Low Stock Alert */}
           <div className="pt-3 border-t border-gray-100">
             <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider mb-3">
-              📦 4. Stock Levels & Thresholds
+              📦 4. Stock & Low Stock Alert
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="form-label text-xs">{product ? 'Current Stock' : 'Opening Stock'}</label>
+                <label className="form-label text-xs font-bold text-gray-700">
+                  {product ? 'Current Available Stock' : 'Initial Stock to Add (Opening Qty)'}
+                </label>
                 <input
-                  className="form-input font-bold"
+                  className="form-input font-bold text-base"
                   type="number"
-                  value={product ? form.currentStock : form.openingStock}
-                  onChange={e => set(product ? 'currentStock' : 'openingStock', Number(e.target.value))}
+                  min="0"
+                  placeholder="0"
+                  value={product ? (form.currentStock ?? 0) : (form.openingStock ?? 0)}
+                  onChange={e => set(product ? 'currentStock' : 'openingStock', e.target.value === '' ? '' : Number(e.target.value))}
                 />
+                <p className="text-[11px] text-gray-500 mt-1">Quantity currently present in store</p>
               </div>
               <div>
-                <label className="form-label text-xs">Reorder Level (Alert)</label>
-                <input className="form-input" type="number" value={form.reorderLevel} onChange={e => set('reorderLevel', Number(e.target.value))} />
-              </div>
-              <div>
-                <label className="form-label text-xs">Minimum Stock</label>
-                <input className="form-input" type="number" value={form.minimumStock} onChange={e => set('minimumStock', Number(e.target.value))} />
-              </div>
-              <div>
-                <label className="form-label text-xs">Maximum Stock</label>
-                <input className="form-input" type="number" value={form.maximumStock} onChange={e => set('maximumStock', Number(e.target.value))} />
+                <label className="form-label text-xs font-bold text-gray-700">
+                  Low Stock Alert Level (Alert below)
+                </label>
+                <input
+                  className="form-input font-bold text-base"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={form.reorderLevel ?? 0}
+                  onChange={e => {
+                    const val = e.target.value === '' ? '' : Number(e.target.value);
+                    set('reorderLevel', val);
+                    set('minimumStock', val);
+                  }}
+                />
+                <p className="text-[11px] text-gray-500 mt-1">Notify and trigger alert when stock falls to this number</p>
               </div>
             </div>
           </div>
@@ -491,7 +536,7 @@ export default function ProductsPage() {
                 <th>Category</th>
                 <th>SKU / Barcode</th>
                 <th>Purchase</th>
-                <th>Selling Price</th>
+                <th>MRP & Selling Price</th>
                 <th>GST</th>
                 <th>In Stock</th>
                 <th>Status</th>
@@ -535,9 +580,23 @@ export default function ProductsPage() {
                       {p.barcode && <p className="text-[10px] text-gray-400">{p.barcode}</p>}
                     </td>
                     <td className="font-medium text-gray-600">{fmt(p.purchasePrice)}</td>
-                    <td className="font-bold text-primary-700 text-sm">
-                      {fmt(p.sellingPrice)}
-                      {p.unit?.symbol && <span className="text-[10px] text-gray-400 font-normal"> /{p.unit.symbol}</span>}
+                    <td>
+                      <div>
+                        <p className="font-extrabold text-primary-700 text-sm">
+                          {fmt(p.sellingPrice)}
+                          {p.unit?.symbol && <span className="text-[10px] text-gray-400 font-normal"> /{p.unit.symbol}</span>}
+                        </p>
+                        {p.mrp > 0 && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-gray-400 line-through">MRP {fmt(p.mrp)}</span>
+                            {p.mrp > p.sellingPrice && (
+                              <span className="text-[9px] font-bold px-1 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
+                                {(((p.mrp - p.sellingPrice) / p.mrp) * 100).toFixed(0)}% OFF
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td><span className="badge-blue text-xs">{p.gstRate}%</span></td>
                     <td>

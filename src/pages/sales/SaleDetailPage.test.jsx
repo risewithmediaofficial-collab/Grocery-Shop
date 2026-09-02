@@ -68,8 +68,17 @@ describe('SaleDetailPage Print & Action Buttons', () => {
     });
 
     expect(screen.getAllByText('INV-000101')[0]).toBeInTheDocument();
+    expect(screen.getByText('Ponni Rice 25kg')).toBeInTheDocument();
+    expect(screen.getAllByText(/1 bag/i)[0]).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Print A4 Tax Invoice/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Print Thermal Slip/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Repeat & Edit \(POS\)/i })).toBeInTheDocument();
+
+    // Toggle to thermal slip mode
+    const thermalTab = screen.getByRole('button', { name: /🧾 Thermal Slip/i });
+    await act(async () => {
+      fireEvent.click(thermalTab);
+    });
+    expect(screen.getByText('Ponni Rice 25kg')).toBeInTheDocument();
   });
 });
