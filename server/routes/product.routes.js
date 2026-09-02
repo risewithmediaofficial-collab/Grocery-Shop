@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const { StockMovement } = require('../models/Inventory');
+const { Notification } = require('../models/System');
 const { protect, authorize } = require('../middleware/auth');
 const auditService = require('../services/audit.service');
 
@@ -82,9 +83,86 @@ router.put('/:id', protect, authorize('admin', 'manager', 'cashier'), async (req
   try {
     const existing = await Product.findById(req.params.id);
     if (!existing) return res.status(404).json({ success: false, message: 'Product not found' });
-    const oldValues = { sellingPrice: existing.sellingPrice, purchasePrice: existing.purchasePrice, gstRate: existing.gstRate };
+    const oldValues = {
+      sellingPrice: existing.sellingPrice,
+      purchasePrice: existing.purchasePrice,
+      gstRate: existing.gstRate,
+      currentStock: existing.currentStock
+    };
+
+    // Check if stock is being manually reduced without billing
+    const incomingStock = req.body.currentStock !== undefined && req.body.currentStock !== ''
+      ? Number(req.body.currentStock)
+      : undefined;
+    const isStockReduced = incomingStock !== undefined && incomingStock < existing.currentStock;
+    const diff = isStockReduced ? incomingStock - existing.currentStock : 0; // negative difference
+
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    await auditService.log({ user: req.user, action: 'product_updated', module: 'products', recordId: product._id, recordRef: product.productId, oldValue: oldValues, newValue: { sellingPrice: product.sellingPrice, purchasePrice: product.purchasePrice, gstRate: product.gstRate } });
+
+    if (isStockReduced) {
+      const reason = req.body.stockReductionReason || 'Mistakenly Added / Entry Error';
+      const notes = req.body.stockReductionNote || '';
+      const unitsReduced = Math.abs(diff);
+
+      // 1. Record stock movement in ledger
+      try {
+        await StockMovement.create({
+          product: product._id,
+          type: 'adjustment',
+          quantity: diff,
+          balanceBefore: existing.currentStock,
+          balanceAfter: incomingStock,
+          reason: `Unbilled Stock Reduction: ${reason}${notes ? ` - ${notes}` : ''}`,
+          createdBy: req.user._id,
+        });
+      } catch (smErr) {
+        console.error('StockMovement creation error:', smErr.message);
+      }
+
+      // 2. Log in Audit Trail for Admin
+      await auditService.log({
+        user: req.user,
+        action: 'unbilled_stock_reduction',
+        module: 'inventory',
+        recordId: product._id,
+        recordRef: product.productId || product.sku || product.name,
+        oldValue: { stock: existing.currentStock },
+        newValue: {
+          stock: incomingStock,
+          reducedBy: unitsReduced,
+          reason,
+          notes,
+          financialLoss: unitsReduced * (product.purchasePrice || product.sellingPrice || 0)
+        },
+        description: `Staff ${req.user.name || 'User'} reduced ${product.name} stock by ${unitsReduced} units (${existing.currentStock} → ${incomingStock}). Reason: ${reason}${notes ? ` - Note: "${notes}"` : ''}`
+      });
+
+      // 3. Create real-time notification for Admin
+      try {
+        await Notification.create({
+          type: 'stock_adjustment',
+          title: '⚠️ Unbilled Stock Reduction',
+          message: `${req.user.name || 'Staff'} reduced stock of "${product.name}" from ${existing.currentStock} to ${incomingStock} (-${unitsReduced} units). Reason: ${reason}${notes ? ` (${notes})` : ''}`,
+          severity: 'warning',
+          forRoles: ['admin'],
+          relatedId: product._id,
+          relatedModel: 'Product',
+        });
+      } catch (notifErr) {
+        console.error('Notification error on stock reduction:', notifErr.message);
+      }
+    } else {
+      await auditService.log({
+        user: req.user,
+        action: 'product_updated',
+        module: 'products',
+        recordId: product._id,
+        recordRef: product.productId,
+        oldValue: oldValues,
+        newValue: { sellingPrice: product.sellingPrice, purchasePrice: product.purchasePrice, gstRate: product.gstRate, currentStock: product.currentStock }
+      });
+    }
+
     res.json({ success: true, data: product, message: 'Product updated successfully' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });

@@ -22,7 +22,8 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
   const [productId, setProductId] = useState('');
   const [adjustedQty, setAdjustedQty] = useState('');
   const [type, setType] = useState('correction');
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState('Mistakenly Added / Entry Error');
+  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   const filteredProducts = useMemo(() => {
@@ -31,6 +32,7 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
   }, [products, selectedCat]);
 
   const selectedProduct = products.find(p => p._id === productId);
+  const isNegative = parseInt(adjustedQty) < 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,9 +47,10 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
         productId,
         adjustedQty: qty,
         type,
-        reason
+        reason,
+        notes
       });
-      toast.success('Stock adjusted successfully');
+      toast.success(qty < 0 ? 'Stock reduction recorded & logged for Admin' : 'Stock adjusted successfully');
       onSave();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to adjust stock');
@@ -133,30 +136,60 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
                   value={adjustedQty}
                   onChange={e => setAdjustedQty(e.target.value)}
                 />
-                <p className="text-[10px] text-gray-400 mt-0.5">Positive (+) or Negative (-)</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Use negative (-N) to reduce stock</p>
               </div>
 
               <div>
-                <label className="form-label text-xs font-bold">Type</label>
-                <select className="form-select text-xs" value={type} onChange={e => setType(e.target.value)}>
-                  <option value="correction">Audit Correction</option>
-                  <option value="damage">Damaged Goods</option>
-                  <option value="expiry">Expired Stock</option>
-                  <option value="theft">Lost / Theft</option>
-                  <option value="other">Other</option>
+                <label className="form-label text-xs font-bold">Category of Adjustment</label>
+                <select className="form-select text-xs font-medium" value={type} onChange={e => setType(e.target.value)}>
+                  <option value="mistake">📝 Mistakenly Added / Entry Error</option>
+                  <option value="damage">🗑️ Damaged / Broken Goods</option>
+                  <option value="expiry">⏳ Expired / Spoiled Stock</option>
+                  <option value="theft">🔍 Lost / Theft (Shrinkage)</option>
+                  <option value="correction">⚖️ Audit / Count Correction</option>
+                  <option value="other">✏️ Other</option>
                 </select>
               </div>
             </div>
 
+            {isNegative && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                <span className="text-base leading-none">⚠️</span>
+                <div>
+                  <p className="font-bold">Unbilled Stock Reduction Notice</p>
+                  <p className="text-[11px] text-amber-800">
+                    Reducing {Math.abs(parseInt(adjustedQty))} units will be permanently logged to the Admin Audit Trail with your explanation.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="form-label text-xs font-bold">Reason * (Mandatory for audit)</label>
-              <textarea
-                required
-                rows={2}
-                className="form-input text-xs"
-                placeholder="e.g. Physical inventory verification discrepancy"
+              <label className="form-label text-xs font-bold">Primary Reason *</label>
+              <select
+                className="form-select text-xs font-semibold"
                 value={reason}
                 onChange={e => setReason(e.target.value)}
+              >
+                <option value="Mistakenly Added / Entry Error">📝 Mistakenly Added / Entry Error (e.g. wrong count before)</option>
+                <option value="Damaged / Broken in Store">🗑️ Damaged / Broken in Store</option>
+                <option value="Expired / Spoiled Stock">⏳ Expired / Spoiled Stock</option>
+                <option value="Lost / Suspected Theft">🔍 Lost / Suspected Theft (Shrinkage)</option>
+                <option value="Returned to Supplier">↩️ Returned to Supplier / Vendor</option>
+                <option value="Internal Store Consumption">🏢 Internal Store Consumption</option>
+                <option value="Physical Count Discrepancy">⚖️ Physical Count Discrepancy</option>
+                <option value="Other Reason">✏️ Other Reason</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label text-xs font-bold text-gray-700">Detailed Explanation / Notes for Admin</label>
+              <textarea
+                rows={2}
+                className="form-input text-xs"
+                placeholder="e.g. Mistakenly added 20 packets instead of 10 during yesterday's delivery"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { StockMovement, StockAdjustment, Batch } = require('../models/Inventory');
+const { Notification } = require('../models/System');
 const Product = require('../models/Product');
 const stockService = require('../services/stock.service');
 const auditService = require('../services/audit.service');
@@ -44,7 +45,7 @@ router.get('/adjustments', protect, async (req, res) => {
 // POST /api/inventory/adjust — stock adjustment
 router.post('/adjust', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
   try {
-    const { productId, adjustedQty, reason, type } = req.body;
+    const { productId, adjustedQty, reason, type, notes } = req.body;
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
@@ -53,14 +54,15 @@ router.post('/adjust', protect, authorize('admin', 'manager', 'cashier'), async 
     if (newStock < 0) return res.status(400).json({ success: false, message: 'Stock cannot go below 0' });
 
     const count = await StockAdjustment.countDocuments();
+    const fullReason = reason + (notes ? ` - ${notes}` : '');
     const adjustment = await StockAdjustment.create({
       adjustmentNumber: `ADJ-${String(count + 1).padStart(5, '0')}`,
       product: product._id,
       currentStock,
       adjustedQty,
       newStock,
-      reason,
-      type: type || 'correction',
+      reason: fullReason,
+      type: type || (adjustedQty < 0 ? 'reduction' : 'correction'),
       createdBy: req.user._id,
       approvedBy: req.user._id,
     });
@@ -68,11 +70,55 @@ router.post('/adjust', protect, authorize('admin', 'manager', 'cashier'), async 
     await stockService.changeStock(product._id, adjustedQty, 'adjustment', {
       reference: adjustment.adjustmentNumber,
       referenceId: adjustment._id,
-      reason,
+      reason: fullReason,
       createdBy: req.user._id,
     });
 
-    await auditService.log({ user: req.user, action: 'stock_adjusted', module: 'inventory', recordId: product._id, recordRef: product.productId, oldValue: { stock: currentStock }, newValue: { stock: newStock, reason } });
+    if (adjustedQty < 0) {
+      const unitsReduced = Math.abs(adjustedQty);
+      // Log Unbilled Stock Reduction in Audit Trail
+      await auditService.log({
+        user: req.user,
+        action: 'unbilled_stock_reduction',
+        module: 'inventory',
+        recordId: product._id,
+        recordRef: product.productId || product.name,
+        oldValue: { stock: currentStock },
+        newValue: {
+          stock: newStock,
+          reducedBy: unitsReduced,
+          reason,
+          notes: notes || '',
+          financialLoss: unitsReduced * (product.purchasePrice || product.sellingPrice || 0)
+        },
+        description: `Staff ${req.user.name || 'User'} reduced ${product.name} stock by ${unitsReduced} units (${currentStock} → ${newStock}). Reason: ${reason}${notes ? ` - Note: "${notes}"` : ''}`
+      });
+
+      // Real-time Notification for Admin
+      try {
+        await Notification.create({
+          type: 'stock_adjustment',
+          title: '⚠️ Unbilled Stock Reduction',
+          message: `${req.user.name || 'Staff'} reduced stock of "${product.name}" from ${currentStock} to ${newStock} (-${unitsReduced} units). Reason: ${reason}${notes ? ` (${notes})` : ''}`,
+          severity: 'warning',
+          forRoles: ['admin'],
+          relatedId: product._id,
+          relatedModel: 'Product',
+        });
+      } catch (notifErr) {
+        console.error('Notification error on stock adjustment:', notifErr.message);
+      }
+    } else {
+      await auditService.log({
+        user: req.user,
+        action: 'stock_adjusted',
+        module: 'inventory',
+        recordId: product._id,
+        recordRef: product.productId,
+        oldValue: { stock: currentStock },
+        newValue: { stock: newStock, reason: fullReason }
+      });
+    }
 
     res.status(201).json({ success: true, data: adjustment, message: 'Stock adjusted successfully' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }

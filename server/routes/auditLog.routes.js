@@ -5,9 +5,10 @@ const { protect, authorize } = require('../middleware/auth');
 
 router.get('/', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { module, user, dateFrom, dateTo, page = 1, limit = 30 } = req.query;
+    const { module, user, action, dateFrom, dateTo, page = 1, limit = 30 } = req.query;
     const query = {};
     if (module) query.module = module;
+    if (action) query.action = action;
     if (user) query.user = user;
     if (dateFrom || dateTo) {
       query.createdAt = {};

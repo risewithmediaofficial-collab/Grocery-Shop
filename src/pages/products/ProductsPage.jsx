@@ -30,12 +30,23 @@ const CATEGORY_BADGES = {
 };
 
 function ProductForm({ product, categories, units, brands, onSave, onClose, defaultCategory = '' }) {
-  const [form, setForm] = useState(product || {
-    name: '', sku: '', barcode: '', category: defaultCategory, subCategory: '', brand: '', unit: '',
-    purchasePrice: '', sellingPrice: '', mrp: '', wholesalePrice: '',
-    hsnCode: '', gstRate: 5, taxType: 'exclusive',
-    openingStock: 0, minimumStock: 0, reorderLevel: 0, maximumStock: 0,
-    batchTracking: false, expiryTracking: false, status: 'active',
+  const [form, setForm] = useState(() => {
+    if (product) {
+      return {
+        ...product,
+        category: product.category?._id || (typeof product.category === 'string' ? product.category : '') || '',
+        subCategory: product.subCategory?._id || (typeof product.subCategory === 'string' ? product.subCategory : '') || '',
+        unit: product.unit?._id || (typeof product.unit === 'string' ? product.unit : '') || '',
+        brand: product.brand?._id || (typeof product.brand === 'string' ? product.brand : '') || '',
+      };
+    }
+    return {
+      name: '', sku: '', barcode: '', category: defaultCategory, subCategory: '', brand: '', unit: '',
+      purchasePrice: '', sellingPrice: '', mrp: '', wholesalePrice: '',
+      hsnCode: '', gstRate: 5, taxType: 'exclusive',
+      openingStock: 0, minimumStock: 0, reorderLevel: 0, maximumStock: 0,
+      batchTracking: false, expiryTracking: false, status: 'active',
+    };
   });
   const [subCategories, setSubCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -74,19 +85,18 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
     return { type: 'warning', diff: (sell - mrp).toFixed(2) };
   }, [form.mrp, form.sellingPrice]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) return toast.error('Product name is required');
-    if (!form.category) return toast.error('Please select a category');
-    if (!form.sellingPrice) return toast.error('Selling price is required');
+  const [showReductionPrompt, setShowReductionPrompt] = useState(false);
+  const [reductionReason, setReductionReason] = useState('Mistakenly Added / Entry Error');
+  const [reductionNote, setReductionNote] = useState('');
 
+  const saveProduct = async (payload) => {
     setLoading(true);
     try {
       if (product) {
-        await api.put(`/products/${product._id}`, form);
+        await api.put(`/products/${product._id}`, payload);
         toast.success('Product updated successfully');
       } else {
-        await api.post('/products', form);
+        await api.post('/products', payload);
         toast.success('Product created successfully');
       }
       onSave();
@@ -95,6 +105,23 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return toast.error('Product name is required');
+    if (!form.category) return toast.error('Please select a category');
+    if (!form.sellingPrice) return toast.error('Selling price is required');
+
+    // Detect if stock is manually reduced on existing product
+    const incomingStock = form.currentStock !== undefined && form.currentStock !== '' ? Number(form.currentStock) : undefined;
+    const oldStock = Number(product?.currentStock || 0);
+    if (product && incomingStock !== undefined && incomingStock < oldStock) {
+      setShowReductionPrompt(true);
+      return;
+    }
+
+    await saveProduct(form);
   };
 
   return createPortal(
@@ -375,6 +402,101 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
             </button>
           </div>
         </form>
+
+        {/* Stock Reduction Reason Prompt Modal */}
+        {showReductionPrompt && (
+          <div className="fixed inset-0 bg-black/75 z-[10000] flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-amber-300 animate-in zoom-in-95 duration-150">
+              <div className="bg-gradient-to-r from-amber-600 to-amber-700 text-white p-4.5 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold shrink-0">
+                  <AlertTriangle size={22} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base leading-tight">Stock Reduction Reason Required</h3>
+                  <p className="text-xs text-amber-100 mt-0.5">Logged permanently to Admin Security Audit Trail</p>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                  <div className="flex justify-between font-bold text-amber-950">
+                    <span>Product:</span>
+                    <span className="truncate max-w-[200px]">{product?.name}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Current In-Store Stock:</span>
+                    <span className="font-bold text-gray-900">{product?.currentStock} {product?.unit?.symbol || ''}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>New Reduced Stock:</span>
+                    <span className="font-bold text-red-600">{form.currentStock} {product?.unit?.symbol || ''}</span>
+                  </div>
+                  <div className="flex justify-between pt-1.5 border-t border-amber-200/80 font-black text-red-700">
+                    <span>Total Unbilled Reduction:</span>
+                    <span>-{Number(product?.currentStock || 0) - Number(form.currentStock)} {product?.unit?.symbol || ''}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label text-xs font-bold text-gray-800 mb-1 block">
+                    Why is stock being reduced without a customer bill? *
+                  </label>
+                  <select
+                    className="form-select text-xs font-semibold w-full"
+                    value={reductionReason}
+                    onChange={e => setReductionReason(e.target.value)}
+                  >
+                    <option value="Mistakenly Added / Entry Error">📝 Mistakenly Added / Entry Error (e.g. wrong inward count)</option>
+                    <option value="Damaged / Broken in Store">🗑️ Damaged / Broken / Leaked in store</option>
+                    <option value="Expired / Spoiled Stock">⏳ Expired / Spoiled / Rotten</option>
+                    <option value="Lost / Suspected Theft (Shrinkage)">🔍 Lost / Suspected Theft (Shrinkage)</option>
+                    <option value="Returned to Supplier">↩️ Returned to Supplier / Vendor</option>
+                    <option value="Internal Store Consumption">🏢 Internal Store Consumption / Sampling</option>
+                    <option value="Physical Count Discrepancy">⚖️ Physical Count Discrepancy</option>
+                    <option value="Other Reason">✏️ Other Reason</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label text-xs font-bold text-gray-700 mb-1 block">
+                    Explanation Note for Admin (Optional / Details)
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="form-input text-xs w-full"
+                    placeholder="e.g. Mistakenly entered 20 instead of 10 during yesterday's inward batch"
+                    value={reductionNote}
+                    onChange={e => setReductionNote(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReductionPrompt(false)}
+                    className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setShowReductionPrompt(false);
+                      await saveProduct({
+                        ...form,
+                        stockReductionReason: reductionReason,
+                        stockReductionNote: reductionNote,
+                      });
+                    }}
+                    className="btn-primary py-2 px-4.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 shadow-md cursor-pointer"
+                  >
+                    Confirm & Update Stock
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body

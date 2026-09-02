@@ -44,4 +44,42 @@ describe('AuditLogPage Component', () => {
     expect(screen.getByText('Karthik Admin')).toBeInTheDocument();
     expect(screen.getByText('sale_created')).toBeInTheDocument();
   });
+
+  it('renders unbilled stock reduction audit entry with reason and warning badge', async () => {
+    const unbilledLog = [
+      {
+        _id: 'u1',
+        module: 'inventory',
+        action: 'unbilled_stock_reduction',
+        recordRef: 'PROD-0012',
+        userName: 'Ramesh Staff',
+        createdAt: new Date().toISOString(),
+        oldValue: { stock: 25 },
+        newValue: {
+          stock: 15,
+          reducedBy: 10,
+          reason: 'Mistakenly Added / Entry Error',
+          notes: 'Count mistake during inward',
+          financialLoss: 650,
+        },
+      },
+    ];
+
+    api.get.mockResolvedValueOnce({
+      data: { data: unbilledLog, total: 1 },
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuditLogPage />
+        </MemoryRouter>
+      );
+    });
+
+    expect(screen.getByText(/UNBILLED REDUCTION/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mistakenly Added \/ Entry Error/i)).toBeInTheDocument();
+    expect(screen.getByText(/Count mistake during inward/i)).toBeInTheDocument();
+    expect(screen.getByText(/25 ➔ 15 \(-10 units\)/i)).toBeInTheDocument();
+  });
 });

@@ -26,7 +26,7 @@ describe('ProductsPage Component & Buttons', () => {
       purchasePrice: 1250,
       currentStock: 20,
       reorderLevel: 5,
-      unit: { symbol: 'bag' },
+      unit: { _id: 'u1', symbol: 'bag' },
       status: 'active',
     },
   ];
@@ -73,5 +73,42 @@ describe('ProductsPage Component & Buttons', () => {
     });
 
     expect(screen.getByText('Add New Grocery Product')).toBeInTheDocument();
+  });
+
+  it('triggers stock reduction reason prompt modal when lowering product stock', async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <ProductsPage />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    // Click Edit button for Ponni Rice 25kg
+    const editBtn = screen.getByTitle('Edit Product');
+    await act(async () => {
+      fireEvent.click(editBtn);
+    });
+
+    expect(screen.getByText('Edit Product')).toBeInTheDocument();
+
+    // Find current available stock input (currentStock is 20)
+    const stockInput = screen.getByDisplayValue('20');
+    await act(async () => {
+      fireEvent.change(stockInput, { target: { value: '15' } });
+    });
+
+    // Submit form (Update Product)
+    const updateBtn = screen.getByRole('button', { name: /Update Product/i });
+    await act(async () => {
+      fireEvent.submit(updateBtn.closest('form'));
+    });
+
+    // Verify Stock Reduction Reason Modal is displayed
+    expect(screen.getByText('Stock Reduction Reason Required')).toBeInTheDocument();
+    expect(screen.getByText(/Why is stock being reduced without a customer bill\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mistakenly Added \/ Entry Error/i)).toBeInTheDocument();
   });
 });
