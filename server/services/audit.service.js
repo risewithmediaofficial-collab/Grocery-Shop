@@ -1,8 +1,5 @@
 const { AuditLog } = require('../models/System');
 
-/**
- * Create an audit log entry for any important action
- */
 exports.log = async ({ user, action, module, recordId, recordRef, oldValue, newValue, description, ipAddress }) => {
   try {
     await AuditLog.create({
@@ -18,7 +15,7 @@ exports.log = async ({ user, action, module, recordId, recordRef, oldValue, newV
       ipAddress,
     });
   } catch (err) {
-    // Non-blocking — audit log failure should not break the main operation
+    // Log failure silently — audit errors must not interrupt the request flow
     console.error('Audit log error:', err.message);
   }
 };

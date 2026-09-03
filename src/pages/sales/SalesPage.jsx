@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Filter, Receipt, Eye, RotateCcw, Calendar, DollarSign, ArrowUpRight } from 'lucide-react';
+import { Plus, Search, Filter, Receipt, Eye, RotateCcw, Calendar, DollarSign, ArrowUpRight, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import clsx from 'clsx';
@@ -130,7 +130,7 @@ export default function SalesPage() {
                   </td>
                   <td>
                     <p className="font-semibold text-gray-900 text-sm">{s.customerName || 'Walk-in'}</p>
-                    {s.customerMobile && <p className="text-xs text-gray-400">📱 {s.customerMobile}</p>}
+                    {s.customerMobile && <p className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} className="text-gray-400" /> {s.customerMobile}</p>}
                   </td>
                   <td className="text-sm font-medium">{s.items?.length || 0} items</td>
                   <td className="text-xs text-gray-600">{fmt(s.totalTax)}</td>

@@ -32,25 +32,24 @@ export function generateOrderConfirmationMessage(order, store = STORE_DETAILS) {
     return `${idx + 1}. *${pName}* × ${qty} ${unit}${note}`;
   }).join('\n');
 
-  return `🛒 *${store.name}*
-📍 _${store.location}_
+  return `*${store.name}*
+_${store.location}_
 
-Hello *${customerName}*, thank you for placing your grocery order with us! 🙏
+Hello *${customerName}*, thank you for placing your grocery order with us.
 
-📋 *Order Details:*
+*Order Details:*
 • *Order ID:* #${orderNum}
-• *Status:* ⏳ Received & Under Review
+• *Status:* Received & Under Review
 • *Delivery to:* ${address}${order.deliveryCharge > 0 ? `\n• *Delivery Charges:* ₹${order.deliveryCharge}` : ''}
 
-🛍️ *Items Ordered:*
+*Items Ordered:*
 ${itemsText}
 
-${order.notes ? `📝 *Special Notes:* ${order.notes}\n` : ''}
-📦 Our store staff is packing your fresh items. We will notify you once your order is on the way!
+${order.notes ? `*Special Notes:* ${order.notes}\n` : ''}Our store staff is packing your items. We will notify you once your order is on the way.
 
-📞 *Need Assistance?*
+*Need Assistance?*
 Contact: ${store.phone}
-Thank you for shopping with *${store.name}*! ✨`;
+Thank you for shopping with *${store.name}*!`;
 }
 
 /**
@@ -61,15 +60,15 @@ export function generateOutForDeliveryMessage(order, store = STORE_DETAILS) {
   const orderNum = order.orderNumber || 'ORD';
   const address = order.deliveryAddress || 'Your Address';
 
-  return `🚚 *${store.name} - Order Out for Delivery!*
+  return `*${store.name} - Order Out for Delivery*
 
 Hi *${customerName}*, your grocery order *#${orderNum}* is packed and currently on the way to:
-📍 *${address}*
+*${address}*
 
-📦 Our delivery executive will reach you shortly. Please keep payment/cash ready if applicable.
+Our delivery executive will reach you shortly. Please keep payment/cash ready if applicable.
 
-📞 *Store Helpline:* ${store.phone}
-Thank you for choosing *${store.name}*!`;
+*Store Helpline:* ${store.phone}
+Thank you for choosing *${store.name}*.`;
 }
 
 /**
@@ -79,15 +78,15 @@ export function generateOrderReadyMessage(order, store = STORE_DETAILS) {
   const customerName = order.customerName || order.customer?.name || 'Valued Customer';
   const orderNum = order.orderNumber || 'ORD';
 
-  return `🎉 *${store.name} - Order Ready for Pickup!*
+  return `*${store.name} - Order Ready for Pickup*
 
 Hello *${customerName}*, your grocery order *#${orderNum}* is completely packed and ready for pickup at our counter:
-📍 *${store.name}, ${store.location}*
+*${store.name}, ${store.location}*
 
 You can collect your items anytime today during store hours.
 
-📞 *Queries:* ${store.phone}
-See you soon! 😊`;
+*Queries:* ${store.phone}
+See you soon!`;
 }
 
 /**
@@ -97,13 +96,13 @@ export function generateOrderDeliveredMessage(order, store = STORE_DETAILS) {
   const customerName = order.customerName || order.customer?.name || 'Valued Customer';
   const orderNum = order.orderNumber || 'ORD';
 
-  return `✅ *${store.name} - Order Completed!*
+  return `*${store.name} - Order Completed*
 
 Dear *${customerName}*, your order *#${orderNum}* has been successfully delivered/collected.
 
 Thank you for shopping at *${store.name}*! We appreciate your trust in us for your household grocery essentials.
 
-🌟 Have a wonderful day ahead!`;
+Have a wonderful day ahead!`;
 }
 
 /**

@@ -4,30 +4,187 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
-const Expense = require('../models/Expense');
+const Order = require('../models/Order');
+const User = require('../models/User');
+const { AuditLog } = require('../models/System');
 const { protect } = require('../middleware/auth');
 
 // GET /api/dashboard/summary
 router.get('/summary', protect, async (req, res) => {
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const userRole = req.user?.role || 'cashier';
+    const userId = req.user?._id;
+    const isCashier = userRole === 'cashier';
 
-    // Today's sales
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+    // 1. Common to all roles: Active Incoming Customer Orders
+    const incomingOrdersDocs = await Order.find({
+      status: { $in: ['pending', 'confirmed', 'packing', 'ready'] }
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate('customer', 'name mobile');
+
+    const pendingOrdersCount = await Order.countDocuments({ status: 'pending' });
+    const activeOrdersCount = await Order.countDocuments({
+      status: { $in: ['pending', 'confirmed', 'packing', 'ready'] }
+    });
+
+    const incomingOrders = incomingOrdersDocs.map(o => {
+      const itemCount = (o.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0);
+      const itemsSummary = (o.items || []).map(i => `${i.productName || 'Item'} × ${i.quantity}${i.unit ? ` ${i.unit}` : ''}`).join(', ');
+      return {
+        _id: o._id,
+        orderNumber: o.orderNumber,
+        customerName: o.customerName || o.customer?.name || 'Customer',
+        customerMobile: o.customerMobile || o.customer?.mobile || '',
+        deliveryAddress: o.deliveryAddress,
+        notes: o.notes,
+        status: o.status,
+        deliveryCharge: o.deliveryCharge || 0,
+        itemCount,
+        itemsSummary,
+        createdAt: o.createdAt,
+      };
+    });
+
+    // 2. CASHIER PERSONAL DASHBOARD (Only his/her own data)
+    if (isCashier) {
+      const todayCashierSales = await Sale.aggregate([
+        {
+          $match: {
+            saleDate: { $gte: startOfDay, $lte: endOfDay },
+            status: 'completed',
+            createdBy: userId
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$grandTotal' },
+            count: { $sum: 1 },
+            cash: {
+              $sum: {
+                $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0]
+              }
+            },
+            upi: {
+              $sum: {
+                $cond: [{ $eq: ['$paymentMethod', 'upi'] }, '$grandTotal', 0]
+              }
+            },
+            other: {
+              $sum: {
+                $cond: [{ $in: ['$paymentMethod', ['card', 'mixed', 'credit', 'bank_transfer']] }, '$grandTotal', 0]
+              }
+            }
+          }
+        }
+      ]);
+
+      const myTodayTotal = todayCashierSales[0]?.total || 0;
+      const myTodayCount = todayCashierSales[0]?.count || 0;
+      const myTodayCash = todayCashierSales[0]?.cash || 0;
+      const myTodayUpi = todayCashierSales[0]?.upi || 0;
+      const myTodayOther = todayCashierSales[0]?.other || 0;
+      const myAvgBillValue = myTodayCount > 0 ? Math.round(myTodayTotal / myTodayCount) : 0;
+
+      // Lifetime all-time sales by this cashier
+      const allTimeCashierSales = await Sale.aggregate([
+        {
+          $match: {
+            status: 'completed',
+            createdBy: userId
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$grandTotal' },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      // Last 7 days sales for this cashier
+      const last7Days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+        const dayRes = await Sale.aggregate([
+          {
+            $match: {
+              saleDate: { $gte: start, $lte: end },
+              status: 'completed',
+              createdBy: userId
+            }
+          },
+          { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
+        ]);
+
+        last7Days.push({
+          date: start.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+          sales: dayRes[0]?.total || 0,
+          bills: dayRes[0]?.count || 0,
+        });
+      }
+
+      // Recent sales generated by this cashier
+      const recentSales = await Sale.find({
+        status: 'completed',
+        createdBy: userId
+      })
+        .sort({ saleDate: -1 })
+        .limit(8)
+        .populate('customer', 'name mobile');
+
+      // Activity logs for this cashier
+      const cashierLogs = await AuditLog.find({ user: userId })
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+      return res.json({
+        success: true,
+        data: {
+          isCashier: true,
+          cashierName: req.user.name,
+          kpi: {
+            todaySales: myTodayTotal,
+            todaySalesCount: myTodayCount,
+            todayCash: myTodayCash,
+            todayUpi: myTodayUpi,
+            todayOther: myTodayOther,
+            avgBillValue: myAvgBillValue,
+            allTimeSales: allTimeCashierSales[0]?.total || 0,
+            allTimeBillsCount: allTimeCashierSales[0]?.count || 0,
+          },
+          charts: { last7Days },
+          recentSales,
+          cashierLogs,
+          incomingOrders,
+          pendingOrdersCount,
+          activeOrdersCount,
+        }
+      });
+    }
+
+    // 3. ADMIN / MANAGER DASHBOARD (Overall Store Data + Cashier Sub-Data)
     const todaySales = await Sale.aggregate([
       { $match: { saleDate: { $gte: startOfDay, $lte: endOfDay }, status: 'completed' } },
       { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
     ]);
 
-    // Today's purchases
     const todayPurchases = await Purchase.aggregate([
       { $match: { purchaseDate: { $gte: startOfDay, $lte: endOfDay }, status: 'received' } },
       { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
     ]);
 
-    // Today's profit (rough: sales revenue - COGS)
     const todaySalesFull = await Sale.find({ saleDate: { $gte: startOfDay, $lte: endOfDay }, status: 'completed' });
     let todayCOGS = 0;
     for (const sale of todaySalesFull) {
@@ -38,32 +195,27 @@ router.get('/summary', protect, async (req, res) => {
     const todayRevenue = todaySales[0]?.total || 0;
     const todayProfit = todayRevenue - todayCOGS;
 
-    // Totals
     const totalCustomers = await Customer.countDocuments({ status: 'active' });
     const totalProducts = await Product.countDocuments({ status: 'active' });
-    
-    // Stock value
+
     const stockValue = await Product.aggregate([
       { $match: { status: 'active' } },
       { $group: { _id: null, value: { $sum: { $multiply: ['$currentStock', '$purchasePrice'] } } } }
     ]);
 
-    // Outstanding balances
     const pendingCustomer = await Customer.aggregate([
       { $group: { _id: null, total: { $sum: '$outstandingBalance' } } }
     ]);
 
-    // Low stock alerts
     const lowStock = await Product.countDocuments({ $expr: { $and: [{ $gt: ['$currentStock', 0] }, { $lte: ['$currentStock', '$reorderLevel'] }] } });
     const outOfStock = await Product.countDocuments({ currentStock: 0, status: 'active' });
 
-    // Monthly sales chart (last 7 days)
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const start = new Date(d.setHours(0, 0, 0, 0));
-      const end = new Date(d.setHours(23, 59, 59, 999));
+      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
       const daySales = await Sale.aggregate([
         { $match: { saleDate: { $gte: start, $lte: end }, status: 'completed' } },
         { $group: { _id: null, total: { $sum: '$grandTotal' } } }
@@ -79,10 +231,12 @@ router.get('/summary', protect, async (req, res) => {
       });
     }
 
-    // Recent sales
-    const recentSales = await Sale.find({ status: 'completed' }).sort({ saleDate: -1 }).limit(5).populate('customer', 'name');
+    const recentSales = await Sale.find({ status: 'completed' })
+      .sort({ saleDate: -1 })
+      .limit(6)
+      .populate('customer', 'name')
+      .populate('createdBy', 'name email role');
 
-    // Top selling products
     const topProducts = await Sale.aggregate([
       { $match: { status: 'completed' } },
       { $unwind: '$items' },
@@ -91,15 +245,70 @@ router.get('/summary', protect, async (req, res) => {
       { $limit: 5 }
     ]);
 
-    // Low stock products
     const lowStockProducts = await Product.find({ $expr: { $lte: ['$currentStock', '$reorderLevel'] }, status: 'active' })
       .populate('category', 'name')
       .limit(10)
       .sort({ currentStock: 1 });
 
+    // 4. CASHIER SUB-DATA (Cashier1, Cashier2, etc. breakdown)
+    const allCashiers = await User.find({ role: { $in: ['cashier', 'manager', 'admin'] }, isActive: true }).select('name email role mobile lastLogin');
+    const cashierSummaries = [];
+
+    for (const cUser of allCashiers) {
+      const cTodaySales = await Sale.aggregate([
+        {
+          $match: {
+            saleDate: { $gte: startOfDay, $lte: endOfDay },
+            status: 'completed',
+            createdBy: cUser._id
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$grandTotal' },
+            count: { $sum: 1 },
+            cash: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
+            upi: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] }, '$grandTotal', 0] } },
+          }
+        }
+      ]);
+
+      const cAllTime = await Sale.aggregate([
+        { $match: { status: 'completed', createdBy: cUser._id } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }
+      ]);
+
+      const todayTotal = cTodaySales[0]?.total || 0;
+      const todayBills = cTodaySales[0]?.count || 0;
+
+      cashierSummaries.push({
+        _id: cUser._id,
+        name: cUser.name,
+        email: cUser.email,
+        role: cUser.role,
+        mobile: cUser.mobile,
+        lastLogin: cUser.lastLogin,
+        todaySales: todayTotal,
+        todayBillsCount: todayBills,
+        todayCash: cTodaySales[0]?.cash || 0,
+        todayUpi: cTodaySales[0]?.upi || 0,
+        avgBillValue: todayBills > 0 ? Math.round(todayTotal / todayBills) : 0,
+        allTimeSales: cAllTime[0]?.total || 0,
+        allTimeBillsCount: cAllTime[0]?.count || 0,
+      });
+    }
+
+    // 5. CASHIER RECENT ACTIVITIES & AUDIT LOGS
+    const cashierActivities = await AuditLog.find()
+      .populate('user', 'name email role')
+      .sort({ createdAt: -1 })
+      .limit(15);
+
     res.json({
       success: true,
       data: {
+        isCashier: false,
         kpi: {
           todaySales: todayRevenue,
           todaySalesCount: todaySales[0]?.count || 0,
@@ -115,6 +324,11 @@ router.get('/summary', protect, async (req, res) => {
         recentSales,
         topProducts,
         lowStockProducts,
+        cashierSummaries,
+        cashierActivities,
+        incomingOrders,
+        pendingOrdersCount,
+        activeOrdersCount,
       }
     });
   } catch (err) {

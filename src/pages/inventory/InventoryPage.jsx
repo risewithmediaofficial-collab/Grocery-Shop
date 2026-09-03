@@ -2,20 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Warehouse, Plus, Search, Filter, AlertTriangle, ArrowDown,
-  ArrowUp, RefreshCw, Layers, CheckCircle, Package, Tag, X
+  ArrowUp, RefreshCw, Layers, CheckCircle, Package, Tag, X, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
-
-const CATEGORY_ICONS = {
-  'food': '🍚',
-  'beverages': '🥤',
-  'snacks': '🍿',
-  'household': '🧼',
-  'personal care': '🧴',
-};
+import CategoryIcon from '../../components/common/CategoryIcon';
 
 function StockAdjustmentModal({ products, categories, defaultCategory = 'all', onSave, onClose }) {
   const [selectedCat, setSelectedCat] = useState(defaultCategory);
@@ -93,7 +86,7 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
                 <option value="all">-- All Categories --</option>
                 {categories.map(c => (
                   <option key={c._id} value={c._id}>
-                    {CATEGORY_ICONS[c.name.toLowerCase()] || '📦'} {c.name}
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -142,19 +135,19 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
               <div>
                 <label className="form-label text-xs font-bold">Category of Adjustment</label>
                 <select className="form-select text-xs font-medium" value={type} onChange={e => setType(e.target.value)}>
-                  <option value="mistake">📝 Mistakenly Added / Entry Error</option>
-                  <option value="damage">🗑️ Damaged / Broken Goods</option>
-                  <option value="expiry">⏳ Expired / Spoiled Stock</option>
-                  <option value="theft">🔍 Lost / Theft (Shrinkage)</option>
-                  <option value="correction">⚖️ Audit / Count Correction</option>
-                  <option value="other">✏️ Other</option>
+                  <option value="mistake">Mistakenly Added / Entry Error</option>
+                  <option value="damage">Damaged / Broken Goods</option>
+                  <option value="expiry">Expired / Spoiled Stock</option>
+                  <option value="theft">Lost / Theft (Shrinkage)</option>
+                  <option value="correction">Audit / Count Correction</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
             </div>
 
             {isNegative && (
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-                <span className="text-base leading-none">⚠️</span>
+                <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold">Unbilled Stock Reduction Notice</p>
                   <p className="text-[11px] text-amber-800">
@@ -171,14 +164,14 @@ function StockAdjustmentModal({ products, categories, defaultCategory = 'all', o
                 value={reason}
                 onChange={e => setReason(e.target.value)}
               >
-                <option value="Mistakenly Added / Entry Error">📝 Mistakenly Added / Entry Error (e.g. wrong count before)</option>
-                <option value="Damaged / Broken in Store">🗑️ Damaged / Broken in Store</option>
-                <option value="Expired / Spoiled Stock">⏳ Expired / Spoiled Stock</option>
-                <option value="Lost / Suspected Theft">🔍 Lost / Suspected Theft (Shrinkage)</option>
-                <option value="Returned to Supplier">↩️ Returned to Supplier / Vendor</option>
-                <option value="Internal Store Consumption">🏢 Internal Store Consumption</option>
-                <option value="Physical Count Discrepancy">⚖️ Physical Count Discrepancy</option>
-                <option value="Other Reason">✏️ Other Reason</option>
+                <option value="Mistakenly Added / Entry Error">Mistakenly Added / Entry Error (e.g. wrong count before)</option>
+                <option value="Damaged / Broken in Store">Damaged / Broken in Store</option>
+                <option value="Expired / Spoiled Stock">Expired / Spoiled Stock</option>
+                <option value="Lost / Suspected Theft">Lost / Suspected Theft (Shrinkage)</option>
+                <option value="Returned to Supplier">Returned to Supplier / Vendor</option>
+                <option value="Internal Store Consumption">Internal Store Consumption</option>
+                <option value="Physical Count Discrepancy">Physical Count Discrepancy</option>
+                <option value="Other Reason">Other Reason</option>
               </select>
             </div>
 
@@ -264,11 +257,10 @@ export default function InventoryPage() {
     });
 
     return [
-      { id: 'all', name: 'All Items', icon: '🛍️' },
+      { id: 'all', name: 'All Items' },
       ...sortedCats.map(c => ({
         id: c._id,
         name: c.name,
-        icon: CATEGORY_ICONS[c.name.toLowerCase()] || '📦',
       }))
     ];
   }, [categories]);
@@ -338,7 +330,7 @@ export default function InventoryPage() {
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
               )}
             >
-              <span>{tab.icon}</span>
+              <CategoryIcon name={tab.name} size={14} className="shrink-0" />
               <span>{tab.name}</span>
             </button>
           );

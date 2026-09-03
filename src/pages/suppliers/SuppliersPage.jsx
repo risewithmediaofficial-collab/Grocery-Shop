@@ -223,7 +223,7 @@ export default function SuppliersPage() {
                     <span className="badge-gray">{s.supplierId}</span>
                   </td>
                   <td className="text-xs text-gray-600">
-                    <p>📱 {s.mobile}</p>
+                    <p className="flex items-center gap-1"><Phone size={11} className="text-gray-400 shrink-0" /> {s.mobile}</p>
                     {s.gstin && <p className="text-gray-400 font-mono">GST: {s.gstin}</p>}
                   </td>
                   <td className="text-xs text-gray-600">{s.city}, {s.state}</td>

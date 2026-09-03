@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Store, ShoppingCart, Search, Plus, Minus, CheckCircle, Package,
   Phone, MapPin, Clock, ArrowRight, Trash2, X, Sparkles, AlertCircle,
-  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck
+  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck, Truck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { generateOrderConfirmationMessage, openWhatsAppChat, STORE_DETAILS } from '../../utils/whatsapp';
 import clsx from 'clsx';
+import CategoryIcon from '../../components/common/CategoryIcon';
 import {
   getProductCategory,
   getProductSubcategory,
@@ -53,6 +54,37 @@ export default function CustomerOrderPage() {
   const [showMyOrders, setShowMyOrders] = useState(false);
   const [myOrdersList, setMyOrdersList] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'active' | 'completed'
+
+  const activeOrdersCount = useMemo(() => {
+    return myOrdersList.filter(o => {
+      const s = (o.status || '').toLowerCase();
+      return s !== 'delivered' && s !== 'cancelled' && s !== 'returned';
+    }).length;
+  }, [myOrdersList]);
+
+  const completedOrdersCount = useMemo(() => {
+    return myOrdersList.filter(o => {
+      const s = (o.status || '').toLowerCase();
+      return s === 'delivered' || s === 'cancelled' || s === 'returned';
+    }).length;
+  }, [myOrdersList]);
+
+  const filteredOrdersList = useMemo(() => {
+    if (orderFilter === 'active') {
+      return myOrdersList.filter(o => {
+        const s = (o.status || '').toLowerCase();
+        return s !== 'delivered' && s !== 'cancelled' && s !== 'returned';
+      });
+    }
+    if (orderFilter === 'completed') {
+      return myOrdersList.filter(o => {
+        const s = (o.status || '').toLowerCase();
+        return s === 'delivered' || s === 'cancelled' || s === 'returned';
+      });
+    }
+    return myOrdersList;
+  }, [myOrdersList, orderFilter]);
 
   // Cart & Customer Form
   const [customerCart, setCustomerCart] = useState(() => {
@@ -201,97 +233,68 @@ export default function CustomerOrderPage() {
 
   // Cart operations with single entry per product & modify workflow
   const handleOpenPackaging = (prod) => {
-    const prodId = prod._id;
-    const existingEntry = Object.entries(customerCart).find(([k, v]) => {
-      if (k === prodId || k.startsWith(`${prodId}_`)) return true;
-      const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-      return vProdId === prodId;
-    });
-
-    const existingItem = existingEntry ? existingEntry[1] : null;
-
-    if (existingItem) {
-      const qty = typeof existingItem === 'object' ? existingItem.quantity : existingItem;
-      const unit = typeof existingItem === 'object' ? existingItem.unit : (prod.unit?.symbol || 'unit');
-      toast(`"${prod.name}" is already in your cart (Qty: ${qty} ${unit}). Modifying item.`, { icon: 'ℹ️' });
-    }
     setSelectedProductForPackaging(prod);
   };
 
   const handleAddWithPackaging = (packData) => {
-    const { product, name, sellingPrice, quantity, unit, packDetails } = packData;
+    const { product, name, sellingPrice, quantity, unit, packDetails, variantKey } = packData;
     const productId = product._id;
+    const targetKey = variantKey || `${productId}_${packDetails?.optionId || unit || 'default'}`;
 
     setCustomerCart(prev => {
-      // Remove any existing duplicate or variant entries for this base product
-      const nextCart = {};
-      let wasExisting = false;
-
-      for (const [k, v] of Object.entries(prev)) {
-        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        if (k === productId || vProdId === productId || k.startsWith(`${productId}_`)) {
-          wasExisting = true;
-        } else {
-          nextCart[k] = v;
-        }
+      const existing = prev[targetKey];
+      if (existing) {
+        // Same product and same subcategory -> increase quantity
+        const updatedQty = (existing.quantity || 0) + quantity;
+        toast.success(`Increased ${name} to ${updatedQty} ${unit}`);
+        return {
+          ...prev,
+          [targetKey]: {
+            ...existing,
+            quantity: updatedQty,
+          },
+        };
       }
 
-      // Add strictly one updated entry for this product
-      nextCart[productId] = {
-        productId,
-        product,
-        name,
-        sellingPrice,
-        quantity,
-        unit,
-        packDetails,
+      // Different subcategory -> add as new line item in cart
+      toast.success(`Added ${quantity} ${unit} of ${name} to cart!`);
+      return {
+        ...prev,
+        [targetKey]: {
+          productId,
+          product,
+          name,
+          sellingPrice,
+          quantity,
+          unit,
+          packDetails,
+        },
       };
-
-      if (wasExisting) {
-        toast.success(`Updated ${name} in cart: ${quantity} ${unit} (₹${Math.round(sellingPrice * quantity)})`);
-      } else {
-        toast.success(`Added ${quantity} ${unit} of ${name} to cart!`);
-      }
-
-      return nextCart;
     });
   };
 
   const updateQty = (key, delta) => {
     setCustomerCart(prev => {
-      // Find key or matching productId
-      const matchingKey = Object.keys(prev).find(k => {
-        if (k === key) return true;
-        const v = prev[k];
-        const vId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        return vId === key || k.startsWith(`${key}_`);
-      }) || key;
-
-      const item = prev[matchingKey];
+      const item = prev[key];
       if (item === undefined) return prev;
       const currentQty = typeof item === 'object' ? (item.quantity || 1) : Number(item);
       const nextQty = Math.max(0, currentQty + delta);
       if (nextQty === 0) {
         const copy = { ...prev };
-        delete copy[matchingKey];
+        delete copy[key];
         return copy;
       }
       if (typeof item === 'object') {
-        return { ...prev, [matchingKey]: { ...item, quantity: nextQty } };
+        return { ...prev, [key]: { ...item, quantity: nextQty } };
       }
-      return { ...prev, [matchingKey]: nextQty };
+      return { ...prev, [key]: nextQty };
     });
   };
 
   const removeCartItem = (key) => {
     setCustomerCart(prev => {
-      const copy = {};
-      for (const [k, v] of Object.entries(prev)) {
-        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        if (k !== key && vProdId !== key && !k.startsWith(`${key}_`)) {
-          copy[k] = v;
-        }
-      }
+      const copy = { ...prev };
+      delete copy[key];
       return copy;
     });
   };
@@ -307,7 +310,7 @@ export default function CustomerOrderPage() {
     if (typeof val === 'object' && val !== null) {
       const pId = val.productId || val.product?._id || key.split('_')[0] || key;
       return {
-        key: pId,
+        key,
         productId: pId,
         product: val.product || catalog.find(p => p._id === pId),
         name: val.name || val.product?.name || 'Item',
@@ -319,7 +322,7 @@ export default function CustomerOrderPage() {
     const baseKey = key.split('_')[0] || key;
     const prod = catalog.find(p => p._id === baseKey);
     return {
-      key: baseKey,
+      key,
       productId: baseKey,
       product: prod,
       name: prod?.name || 'Item',
@@ -330,14 +333,7 @@ export default function CustomerOrderPage() {
   }, [catalog]);
 
   const normalizedCartList = useMemo(() => {
-    const map = new Map();
-    Object.entries(customerCart).forEach(([k, v]) => {
-      const item = getNormalizedCartItem(k, v);
-      const uniqueId = item.productId || k.split('_')[0] || k;
-      // Deduplicate strictly: one entry per unique base product ID
-      map.set(uniqueId, { ...item, key: uniqueId, productId: uniqueId });
-    });
-    return Array.from(map.values());
+    return Object.entries(customerCart).map(([k, v]) => getNormalizedCartItem(k, v));
   }, [customerCart, getNormalizedCartItem]);
 
   const totalItemCount = normalizedCartList.reduce((sum, item) => sum + item.quantity, 0);
@@ -444,7 +440,7 @@ export default function CustomerOrderPage() {
     // Require Customer Login if not logged in
     if (!customerSession?.customer) {
       setShowLoginModal(true);
-      toast('Please verify your mobile number with OTP to place your order', { icon: '📱' });
+      toast('Please verify your mobile number with OTP to place your order');
       return;
     }
 
@@ -644,9 +640,10 @@ export default function CustomerOrderPage() {
               <button
                 type="button"
                 onClick={handleResetForNewOrder}
-                className="btn-secondary py-3.5 text-xs font-bold gap-1.5 cursor-pointer"
+                className="btn-secondary py-3.5 text-xs font-bold gap-1.5 cursor-pointer flex items-center"
               >
-                🛒 Order More Items
+                <ShoppingCart size={15} />
+                <span>Order More Items</span>
               </button>
             </div>
           </div>
@@ -680,18 +677,6 @@ export default function CustomerOrderPage() {
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {categories.map(cat => {
                     const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
-                    const iconMap = {
-                      'all': '🛍️',
-                      'food & staples': '🍚',
-                      'beverages & dairy': '🥤',
-                      'snacks & biscuits': '🍿',
-                      'personal & household care': '🧼',
-                      'food': '🍚',
-                      'beverages': '🥤',
-                      'snacks': '🍿',
-                      'household': '🧼',
-                    };
-                    const icon = iconMap[cat.toLowerCase()] || '📦';
 
                     return (
                       <button
@@ -701,13 +686,13 @@ export default function CustomerOrderPage() {
                           setSelectedSubCategory('all');
                         }}
                         className={clsx(
-                          'px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer',
+                          'px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer border',
                           isSelected
-                            ? 'bg-primary-600 text-white shadow-xs scale-102'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
+                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                         )}
                       >
-                        <span>{icon}</span>
+                        <CategoryIcon name={cat} size={14} />
                         <span>{cat === 'all' ? 'All Items' : cat}</span>
                       </button>
                     );
@@ -765,7 +750,6 @@ export default function CustomerOrderPage() {
                     const inCartUnit = inCartItem ? (typeof inCartItem === 'object' ? inCartItem.unit : (prod.unit?.symbol || 'unit')) : '';
                     const catName = getProductCategory(prod);
                     const subCatName = getProductSubcategory(prod);
-                    const subIcon = SUBCATEGORY_ICONS[subCatName.toLowerCase()] || '🏷️';
                     const unitName = prod.unit?.symbol || prod.unit?.name || '';
                     const inStock = prod.currentStock > 0;
 
@@ -773,12 +757,7 @@ export default function CustomerOrderPage() {
                       <div
                         key={prod._id}
                         onClick={() => handleOpenPackaging(prod)}
-                        className={clsx(
-                          'card p-3.5 sm:p-4 flex items-center justify-between gap-3 border transition-all duration-150 cursor-pointer hover:shadow-md group',
-                          inCartQty > 0
-                            ? 'border-amber-400 bg-amber-50/20 shadow-xs hover:border-amber-500'
-                            : 'border-gray-200 hover:border-primary-400'
-                        )}
+                        className="card p-3.5 sm:p-4 flex items-center justify-between gap-3 border transition-all duration-150 cursor-pointer hover:shadow-md group border-gray-200 hover:border-primary-400"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-sm text-gray-900 group-hover:text-primary-700 truncate leading-snug">
@@ -789,7 +768,7 @@ export default function CustomerOrderPage() {
                               {catName}
                             </span>
                             <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                              <span>{subIcon}</span>
+                              <CategoryIcon name={subCatName} size={11} />
                               <span>{subCatName}</span>
                             </span>
                             <span className="text-xs text-gray-400">· Stock: <span className={clsx('font-semibold', inStock ? 'text-gray-700' : 'text-red-500')}>{prod.currentStock}</span></span>
@@ -812,23 +791,10 @@ export default function CustomerOrderPage() {
                             e.stopPropagation();
                             handleOpenPackaging(prod);
                           }}
-                          className={clsx(
-                            'btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center',
-                            inCartQty > 0
-                              ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                              : 'btn-primary'
-                          )}
+                          className="btn-primary btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center"
                         >
-                          {inCartQty > 0 ? (
-                            <>
-                              <span>✏️ In Cart: {inCartQty}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Plus size={14} />
-                              <span>Add / Packs</span>
-                            </>
-                          )}
+                          <Plus size={14} />
+                          <span>Add / Packs</span>
                         </button>
                       </div>
                     );
@@ -945,7 +911,8 @@ export default function CustomerOrderPage() {
                           : 'text-gray-500 hover:text-gray-800'
                       )}
                     >
-                      <span>🚚 Home Delivery</span>
+                      <Truck size={14} />
+                      <span>Home Delivery</span>
                     </button>
                     <button
                       type="button"
@@ -957,13 +924,14 @@ export default function CustomerOrderPage() {
                           : 'text-gray-500 hover:text-gray-800'
                       )}
                     >
-                      <span>🏪 Store Pickup (Free)</span>
+                      <Store size={14} />
+                      <span>Store Pickup (Free)</span>
                     </button>
                   </div>
 
                   {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && totalEstimatedAmount < FREE_DELIVERY_THRESHOLD && (
                     <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
-                      <span>🚚</span>
+                      <Truck size={13} className="text-emerald-700 shrink-0" />
                       <span>Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for <b>FREE Delivery</b>!</span>
                     </div>
                   )}
@@ -1027,8 +995,9 @@ export default function CustomerOrderPage() {
                       />
                     </div>
                   ) : (
-                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
-                      📍 <b>Counter Pickup:</b> Collect at New Columbu Stores, Krishnagiri counter.
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 flex items-center gap-1.5">
+                      <MapPin size={13} className="text-slate-500 shrink-0" />
+                      <span><b>Counter Pickup:</b> Collect at New Columbu Stores, Krishnagiri counter.</span>
                     </div>
                   )}
 
@@ -1124,12 +1093,13 @@ export default function CustomerOrderPage() {
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                {serverDemoOtp && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-xs text-amber-800 font-semibold">
-                    🔑 Demo OTP: <span className="font-mono text-sm font-black text-amber-900">{serverDemoOtp}</span>
-                  </div>
-                )}
+              <form onSubmit={handleVerifyOtpAndLogin} className="space-y-4">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-medium">Enter the 6-digit verification code sent to your mobile</p>
+                  {serverDemoOtp && (
+                    <p className="text-[11px] text-gray-400 mt-1">Verification code: <span className="font-mono font-bold text-gray-700">{serverDemoOtp}</span></p>
+                  )}
+                </div>
 
                 <div>
                   <label className="form-label text-xs">6-Digit OTP</label>
@@ -1181,7 +1151,7 @@ export default function CustomerOrderPage() {
                     disabled={verifyingOtp || loginOtp.length < 4}
                     className="btn-primary flex-2 py-3 text-xs font-bold shadow-md cursor-pointer"
                   >
-                    {verifyingOtp ? 'Verifying...' : 'Verify & Login ✓'}
+                    {verifyingOtp ? 'Verifying...' : 'Verify & Login'}
                   </button>
                 </div>
               </form>
@@ -1194,37 +1164,100 @@ export default function CustomerOrderPage() {
       {showMyOrders && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] my-auto flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 text-primary-700 rounded-xl flex items-center justify-center font-bold">
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-lg text-gray-900">Your Order History</h3>
-                    {myOrdersList.length > 0 && (
-                      <span className="bg-primary-50 text-primary-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-primary-200">
-                        {myOrdersList.length} {myOrdersList.length === 1 ? 'order' : 'orders'}
-                      </span>
-                    )}
+            {/* Modern Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white p-5 sm:p-6 border-b border-slate-800 relative overflow-hidden shrink-0">
+              {/* Subtle ambient light */}
+              <div className="absolute top-0 right-1/4 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex items-start sm:items-center justify-between gap-3 relative z-10">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-inner shrink-0">
+                    <Truck size={22} className="text-emerald-400" />
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Orders placed under <span className="font-semibold text-gray-700">+91 {customerSession?.customer?.mobile}</span>
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-extrabold text-lg sm:text-xl text-white tracking-tight">
+                        Your Order History
+                      </h3>
+                      {myOrdersList.length > 0 && (
+                        <span className="bg-emerald-500/20 text-emerald-300 text-xs font-extrabold px-3 py-0.5 rounded-full border border-emerald-500/40 inline-flex items-center gap-1.5 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {myOrdersList.length} {myOrdersList.length === 1 ? 'order' : 'orders'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 flex items-center gap-2 truncate">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200 bg-slate-800/90 px-2 py-0.5 rounded-md border border-slate-700">
+                        <ShieldCheck size={12} className="text-emerald-400" />
+                        +91 {customerSession?.customer?.mobile || '6380140927'}
+                      </span>
+                      <span className="text-slate-400 text-[11px] hidden sm:inline">• Live delivery tracking</span>
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowMyOrders(false)}
+                  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80 shrink-0"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                onClick={() => setShowMyOrders(false)}
-                className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X size={18} />
-              </button>
+
+              {/* Quick Navigation Filter Pills */}
+              {myOrdersList.length > 0 && (
+                <div className="flex items-center gap-2 pt-4 mt-2 border-t border-slate-800/80 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setOrderFilter('all')}
+                    className={clsx(
+                      'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
+                      orderFilter === 'all'
+                        ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
+                        : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-700/60'
+                    )}
+                  >
+                    All Orders ({myOrdersList.length})
+                  </button>
+
+                  {activeOrdersCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderFilter('active')}
+                      className={clsx(
+                        'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
+                        orderFilter === 'active'
+                          ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
+                          : 'bg-slate-800/90 text-emerald-300 hover:bg-slate-800 hover:text-emerald-200 border border-emerald-500/30'
+                      )}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      Live Tracking ({activeOrdersCount})
+                    </button>
+                  )}
+
+                  {completedOrdersCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderFilter('completed')}
+                      className={clsx(
+                        'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
+                        orderFilter === 'completed'
+                          ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
+                          : 'bg-slate-800/90 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700/60'
+                      )}
+                    >
+                      Delivered ({completedOrdersCount})
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Orders List Container */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-gray-50/50">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50/60">
               {loadingOrders ? (
                 <div className="py-16 text-center text-xs text-gray-400">Loading your orders...</div>
               ) : myOrdersList.length === 0 ? (
@@ -1233,83 +1266,157 @@ export default function CustomerOrderPage() {
                   <p className="font-bold text-base text-gray-700">No past orders found</p>
                   <p className="text-xs text-gray-400 mt-1">Place an order to see your live grocery delivery tracking here.</p>
                 </div>
-              ) : (
-                myOrdersList.map(ord => (
-                  <div
-                    key={ord._id}
-                    className="bg-white rounded-2xl p-5 border border-gray-200 hover:border-primary-300 transition-all shadow-xs hover:shadow-md space-y-4"
+              ) : filteredOrdersList.length === 0 ? (
+                <div className="py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-200 p-6 space-y-3">
+                  <p className="font-bold text-sm text-gray-700">No orders match this filter.</p>
+                  <button
+                    type="button"
+                    onClick={() => setOrderFilter('all')}
+                    className="btn btn-secondary text-xs px-3 py-1.5"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-mono font-black text-primary-700 text-sm bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-100">
-                          {ord.orderNumber}
-                        </span>
-                        <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
-                          <Clock size={12} />
-                          {new Date(ord.createdAt).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
+                    View All Orders
+                  </button>
+                </div>
+              ) : (
+                filteredOrdersList.map(ord => {
+                  const totalUnits = (ord.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
 
-                      <span className={clsx(
-                        'text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5',
-                        ord.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                        ord.status === 'out_for_delivery' ? 'bg-purple-100 text-purple-800' :
-                        ord.status === 'ready' ? 'bg-blue-100 text-blue-800' :
-                        ord.status === 'packing' ? 'bg-amber-100 text-amber-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      )}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                        {ord.status?.replace(/_/g, ' ') || 'Pending'}
-                      </span>
-                    </div>
+                  return (
+                    <div
+                      key={ord._id}
+                      className="bg-white rounded-2xl border border-slate-200 hover:border-slate-300 transition-all shadow-xs hover:shadow-sm overflow-hidden space-y-3.5 p-4 sm:p-5"
+                    >
+                      {/* Order Card Header: Order Number, Date, Status, Total */}
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-mono font-bold text-xs shadow-2xs">
+                            <Package size={15} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-extrabold text-slate-900 text-sm tracking-tight">
+                                {ord.orderNumber}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                • {new Date(ord.createdAt).toLocaleDateString('en-IN', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {(ord.items || []).length} items • {totalUnits} units
+                            </p>
+                          </div>
+                        </div>
 
-                    {/* Engaging Live Order Status Tracker */}
-                    <OrderStatusTracker order={ord} />
-
-                    <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        Items in this Order ({(ord.items || []).length}):
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {(ord.items || []).map((item, i) => (
-                          <span
-                            key={i}
-                            className="bg-white px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-800 border border-gray-200 shadow-2xs flex items-center gap-1"
-                          >
-                            <span>🛒 {item.productName || 'Item'}</span>
-                            <span className="text-primary-700 font-bold">× {item.quantity} {item.unit || ''}</span>
+                        <div className="flex items-center gap-3">
+                          {ord.grandTotal > 0 && (
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-400 block leading-none font-semibold uppercase">Total</span>
+                              <span className="text-sm font-extrabold text-slate-900">
+                                ₹{Number(ord.grandTotal).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          )}
+                          <span className={clsx(
+                            'text-[10px] sm:text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 border shadow-2xs',
+                            ord.status === 'delivered' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            ord.status === 'out_for_delivery' ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                            ord.status === 'ready' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                            ord.status === 'packing' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                            'bg-slate-100 text-slate-800 border-slate-300'
+                          )}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                            {ord.status?.replace(/_/g, ' ') || 'Pending'}
                           </span>
-                        ))}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between gap-3 pt-2 text-xs border-t border-gray-100">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <MapPin size={13} className="text-primary-600 shrink-0" />
-                        <span className="truncate font-medium text-gray-700">{ord.deliveryAddress || 'Store Pickup'}</span>
+                      {/* Rapido-Style Live Journey Tracker */}
+                      <OrderStatusTracker order={ord} />
+
+                      {/* Items in this Order (Clean Receipt Flow) */}
+                      <div className="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200/70 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-extrabold uppercase tracking-wider text-slate-500 text-[10px] flex items-center gap-1.5">
+                            <Package size={12} className="text-slate-400" />
+                            Items in this Order ({(ord.items || []).length}):
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            {totalUnits} items
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {(ord.items || []).map((item, i) => (
+                            <div
+                              key={i}
+                              className="bg-white px-3 py-2 rounded-lg border border-slate-200/80 shadow-2xs flex items-center justify-between gap-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                                  <Package size={12} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-800 truncate" title={item.productName}>
+                                    {item.productName || 'Item'}
+                                  </p>
+                                  {item.notes && (
+                                    <p className="text-[10px] text-slate-400 truncate">{item.notes}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md shrink-0 border border-slate-200">
+                                × {item.quantity} {item.unit || ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={clsx(
-                          'px-2 py-0.5 rounded-md text-[10px] font-bold border',
-                          ord.deliveryCharge > 0
-                            ? 'bg-amber-50 text-amber-900 border-amber-200'
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        )}>
-                          {ord.deliveryCharge > 0 ? `Delivery: ₹${ord.deliveryCharge}` : 'Free Delivery'}
-                        </span>
-                        <span className="text-[11px] font-semibold text-gray-400">
-                          {(ord.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0)} items
-                        </span>
+
+                      {/* Delivery Destination & Quick Store Support */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 text-xs border-t border-slate-100">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                            <MapPin size={13} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 font-semibold block uppercase tracking-wider leading-none">Destination</span>
+                            <span className="font-bold text-slate-800 text-xs truncate block">{ord.deliveryAddress || 'Store Pickup'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={clsx(
+                            'px-2.5 py-1 rounded-md text-[10px] font-extrabold border',
+                            ord.deliveryCharge > 0
+                              ? 'bg-amber-50 text-amber-900 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          )}>
+                            {ord.deliveryCharge > 0 ? `Delivery: ₹${ord.deliveryCharge}` : 'Free Delivery'}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const msg = `Hello ${STORE_DETAILS.name}, I would like to check the status of my Order #${ord.orderNumber}.`;
+                              openWhatsAppChat(STORE_DETAILS.cleanPhone, msg);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-2xs"
+                            title="Chat with Store on WhatsApp"
+                          >
+                            <MessageCircle size={11} />
+                            Support
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1403,7 +1510,8 @@ export default function CustomerOrderPage() {
                         : 'text-gray-500 hover:text-gray-800'
                     )}
                   >
-                    <span>🚚 Delivery</span>
+                    <Truck size={14} />
+                    <span>Delivery</span>
                   </button>
                   <button
                     type="button"
@@ -1415,13 +1523,14 @@ export default function CustomerOrderPage() {
                         : 'text-gray-500 hover:text-gray-800'
                     )}
                   >
-                    <span>🏪 Pickup (Free)</span>
+                    <Store size={14} />
+                    <span>Pickup (Free)</span>
                   </button>
                 </div>
 
                 {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && totalEstimatedAmount < FREE_DELIVERY_THRESHOLD && (
                   <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
-                    <span>🚚</span>
+                    <Truck size={13} className="text-emerald-700 shrink-0" />
                     <span>Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for <b>FREE Delivery</b>!</span>
                   </div>
                 )}
@@ -1482,8 +1591,9 @@ export default function CustomerOrderPage() {
                     />
                   </div>
                 ) : (
-                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
-                    📍 <b>Counter Pickup:</b> Collect at New Columbu Stores counter.
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 flex items-center gap-1.5">
+                    <MapPin size={13} className="text-slate-500 shrink-0" />
+                    <span><b>Counter Pickup:</b> Collect at New Columbu Stores counter.</span>
                   </div>
                 )}
                 <div>

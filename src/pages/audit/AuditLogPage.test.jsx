@@ -80,6 +80,6 @@ describe('AuditLogPage Component', () => {
     expect(screen.getByText(/UNBILLED REDUCTION/i)).toBeInTheDocument();
     expect(screen.getByText(/Mistakenly Added \/ Entry Error/i)).toBeInTheDocument();
     expect(screen.getByText(/Count mistake during inward/i)).toBeInTheDocument();
-    expect(screen.getByText(/25 ➔ 15 \(-10 units\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/25 → 15 \(-10 units\)/i)).toBeInTheDocument();
   });
 });

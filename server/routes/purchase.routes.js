@@ -50,7 +50,7 @@ router.post('/', protect, authorize('admin', 'manager', 'cashier'), async (req, 
       item.totalAmount = item.purchasePrice * item.quantity;
       subtotal += item.totalAmount;
       if (item.gstRate) totalTax += (item.totalAmount * item.gstRate) / 100;
-      // Snapshot product name
+      // Store product name at time of record
       const { Product } = require('../models/Product');
     }
     const Product = require('../models/Product');

@@ -98,7 +98,7 @@ router.post('/', protect, async (req, res) => {
 
     const isInterState = customerState !== (shopSettings.state || 'Tamil Nadu');
 
-    // Build sale items with GST snapshots
+    // Build line items with pricing and GST captured at sale time
     let subtotal = 0, totalDiscount = 0, totalTaxableAmount = 0, totalCGST = 0, totalSGST = 0, totalIGST = 0, totalTax = 0;
     const saleItems = [];
 
@@ -128,13 +128,13 @@ router.post('/', protect, async (req, res) => {
       saleItems.push({
         product: product._id,
         productId: product.productId,
-        productName: product.name,
+        productName: item.productName || product.name,
         sku: product.sku,
         barcode: product.barcode,
         hsnCode: product.hsnCode,
         gstRate: product.gstRate,
         quantity: item.quantity,
-        unit: product.unit?.symbol || '',
+        unit: item.unit || product.unit?.symbol || '',
         purchasePrice: product.purchasePrice,
         sellingPrice: item.sellingPrice || product.sellingPrice,
         mrp: item.mrp || product.mrp || (item.sellingPrice || product.sellingPrice),

@@ -216,7 +216,7 @@ function PaymentRecordModal({ customer, onSave, onClose }) {
             <h3 className="font-bold text-gray-900">Record Customer Payment</h3>
             <p className="text-xs text-gray-500">{customer.name} ({customer.customerId})</p>
           </div>
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex justify-between items-center">
@@ -362,7 +362,7 @@ export default function CustomersPage() {
                   </td>
                   <td>
                     <div className="text-xs">
-                      <p className="font-medium text-gray-800 flex items-center gap-1">📱 {c.mobile}</p>
+                      <p className="font-medium text-gray-800 flex items-center gap-1"><Phone size={11} className="text-gray-400 shrink-0" /> {c.mobile}</p>
                       <span className="badge-gray mt-0.5">{c.customerId}</span>
                     </div>
                   </td>

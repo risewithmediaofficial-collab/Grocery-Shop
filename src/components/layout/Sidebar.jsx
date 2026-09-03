@@ -183,7 +183,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
 
   return (
     <>
-      {/* 1. DESKTOP SIDEBAR (Docked on desktop screens) */}
+      {/* Desktop sidebar */}
       <aside
         className={clsx(
           'hidden md:flex flex-col h-screen bg-sidebar-bg border-r border-gray-800 transition-all duration-300 shrink-0 select-none',
@@ -257,7 +257,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
         </div>
       </aside>
 
-      {/* 2. MOBILE DRAWER SIDEBAR */}
+      {/* Mobile drawer sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           {/* Dark Backdrop */}

@@ -149,16 +149,17 @@ async function seed() {
 
   // Customers
   const customers = await Customer.insertMany([
-    { customerId: 'CUST-00001', name: 'Ramesh', mobile: '9500000001', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
-    { customerId: 'CUST-00002', name: 'Ramesh', mobile: '9500000002', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
-    { customerId: 'CUST-00003', name: 'Suresh Kumar', mobile: '9500000003', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'credit', creditLimit: 5000 },
-    { customerId: 'CUST-00004', name: 'Priya Devi', mobile: '9500000004', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
-    { customerId: 'CUST-00005', name: 'Murugan', mobile: '9500000005', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'wholesale', creditLimit: 20000 },
+    { customerId: 'CUST-00001', name: 'Ramesh Kumar', mobile: '9842156789', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
+    { customerId: 'CUST-00002', name: 'Anand Natarajan', mobile: '9443218765', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
+    { customerId: 'CUST-00003', name: 'Suresh Kumar', mobile: '9789123450', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'credit', creditLimit: 5000 },
+    { customerId: 'CUST-00004', name: 'Priya Devi', mobile: '9655432198', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'regular' },
+    { customerId: 'CUST-00005', name: 'K. Murugan', mobile: '9944123890', city: 'Krishnagiri', state: 'Tamil Nadu', customerType: 'wholesale', creditLimit: 20000 },
   ]);
 
   // Users
-  await User.create({ name: 'Admin User', email: 'admin@columbu.com', password: 'admin123', role: 'admin', mobile: '9000000000' });
-  await User.create({ name: 'Cashier', email: 'cashier@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000001' });
+  const adminUser = await User.create({ name: 'Admin User', email: 'admin@columbu.com', password: 'admin123', role: 'admin', mobile: '9000000000' });
+  const cashier1 = await User.create({ name: 'Cashier 1', email: 'cashier@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000001' });
+  const cashier2 = await User.create({ name: 'Cashier 2', email: 'cashier2@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000002' });
 
   // Shop Settings
   await Setting.create({ key: 'shop', value: {
@@ -210,9 +211,47 @@ async function seed() {
         status: 'completed',
         shopState: 'Tamil Nadu',
         isInterState: false,
+        createdBy: s % 2 === 0 ? cashier1._id : cashier2._id,
       });
     }
   }
+
+  // Sample active incoming customer order
+  await Order.create({
+    customer: customers[0]._id,
+    customerName: customers[0].name,
+    customerMobile: customers[0].mobile,
+    deliveryAddress: '14 Gandhi Road, Krishnagiri',
+    status: 'pending',
+    deliveryCharge: 30,
+    items: [
+      { product: rice._id, productName: rice.name, quantity: 2, unit: 'kg', notes: 'Basmati' },
+      { product: oil._id, productName: oil.name, quantity: 1, unit: 'L', notes: 'Cooking oil' },
+    ],
+    notes: 'Please pack in eco-friendly bag',
+  });
+
+  // Sample Audit Logs
+  const { AuditLog } = require('../models/System');
+  await AuditLog.create([
+    {
+      user: cashier1._id,
+      userName: 'Cashier 1',
+      action: 'user_login',
+      module: 'auth',
+      description: 'Cashier 1 signed in to Billing Terminal',
+      createdAt: new Date(Date.now() - 3600000),
+    },
+    {
+      user: cashier2._id,
+      userName: 'Cashier 2',
+      action: 'sale_created',
+      module: 'sales',
+      recordRef: 'KS-10024',
+      description: 'Cashier 2 generated bill KS-10024 (₹1,450 • Cash)',
+      createdAt: new Date(Date.now() - 1800000),
+    },
+  ]);
 
   console.log('Seed data created successfully!');
   console.log('\nLogin credentials:');

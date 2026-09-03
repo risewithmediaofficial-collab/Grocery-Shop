@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const { Notification } = require('../models/System');
 const { protect } = require('../middleware/auth');
 const whatsappService = require('../services/whatsapp.service');
+const auditService = require('../services/audit.service');
 
 /**
  * ORDER SYSTEM ROUTES
@@ -107,7 +108,7 @@ router.post('/', async (req, res) => {
     // Notify store cashier & admin
     await Notification.create({
       type: 'new_order',
-      title: '📦 New Customer Order Placed',
+      title: 'New Customer Order Placed',
       message: `Order #${order.orderNumber} received from ${order.customerName} (${items.length} items)`,
       severity: 'info',
       relatedId: order._id,
@@ -115,13 +116,13 @@ router.post('/', async (req, res) => {
       forRoles: ['admin', 'manager', 'cashier'],
     });
 
-    // Automatically send WhatsApp order confirmation in background
-    whatsappService.sendOrderPlacedAutoMessage(order).catch(e => console.error('WhatsApp auto-send error:', e));
+    // Send WhatsApp order confirmation asynchronously
+    whatsappService.sendOrderPlacedAutoMessage(order).catch(e => console.error('[WhatsApp] Order confirmation error:', e));
 
     res.status(201).json({
       success: true,
       data: order,
-      message: 'Your grocery order has been received! Our store staff will pack your order shortly.'
+      message: 'Order placed successfully.'
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -186,8 +187,8 @@ router.put('/:id/status', protect, async (req, res) => {
     // Create real-time notification for Cashiers and Team
     try {
       const statusTitle = status === 'confirmed'
-        ? `✅ Order #${order.orderNumber} Accepted by ${req.user.name}`
-        : `🔄 Order #${order.orderNumber} Marked as "${status.replace(/_/g, ' ')}" by ${req.user.name}`;
+        ? `Order #${order.orderNumber} Accepted by ${req.user.name}`
+        : `Order #${order.orderNumber} Marked as "${status.replace(/_/g, ' ')}" by ${req.user.name}`;
 
       await Notification.create({
         type: 'new_order',
@@ -201,8 +202,17 @@ router.put('/:id/status', protect, async (req, res) => {
       console.error('Order status notification error:', notifErr);
     }
 
-    // Automatically send WhatsApp status update in background
-    whatsappService.sendOrderStatusAutoMessage(order, status).catch(e => console.error('WhatsApp auto-send error:', e));
+    // Send WhatsApp status update asynchronously
+    whatsappService.sendOrderStatusAutoMessage(order, status).catch(e => console.error('[WhatsApp] Status update error:', e));
+
+    await auditService.log({
+      user: req.user,
+      action: 'order_status_updated',
+      module: 'orders',
+      recordId: order._id,
+      recordRef: order.orderNumber,
+      description: `${req.user.name} (${req.user.role}) changed Order #${order.orderNumber} status to "${status.replace(/_/g, ' ')}"`
+    });
 
     res.json({ success: true, data: order, message: `Order status updated to ${status}` });
   } catch (err) {
@@ -240,11 +250,20 @@ router.post('/:id/send-to-billing', protect, async (req, res) => {
 
     await order.save();
 
+    await auditService.log({
+      user: req.user,
+      action: 'order_sent_to_billing',
+      module: 'orders',
+      recordId: order._id,
+      recordRef: order.orderNumber,
+      description: `${req.user.name} (${req.user.role}) sent Order #${order.orderNumber} to POS Billing`
+    });
+
     // Create prominent notification for Cashier
     try {
       await Notification.create({
         type: 'new_order',
-        title: `🚀 Order #${order.orderNumber} Sent to POS by ${req.user.name}`,
+        title: `Order #${order.orderNumber} Sent to POS by ${req.user.name}`,
         message: `${req.user.name} (${req.user.role}) accepted & sent Order #${order.orderNumber} for ${order.customerName || 'Customer'} to the Billing Counter.`,
         severity: 'info',
         relatedId: order._id,

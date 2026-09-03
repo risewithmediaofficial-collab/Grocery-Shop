@@ -86,11 +86,11 @@ export default function ExpiryPage() {
       {/* Expiry Items List */}
       <div className="card">
         <div className="card-header">
-          <h3 className="font-bold text-sm text-gray-900">
-            {activeTab === 'expired' && '🚨 Expired Products'}
-            {activeTab === 'within7' && '⚠️ Products Expiring in Next 7 Days'}
-            {activeTab === 'within30' && '⏰ Products Expiring in Next 30 Days'}
-            {activeTab === 'within60' && '📋 Products Expiring in Next 60 Days'}
+          <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2">
+            {activeTab === 'expired' && <><AlertCircle size={16} className="text-red-600" /><span>Expired Products</span></>}
+            {activeTab === 'within7' && <><AlertTriangle size={16} className="text-amber-600" /><span>Products Expiring in Next 7 Days</span></>}
+            {activeTab === 'within30' && <><Clock size={16} className="text-orange-600" /><span>Products Expiring in Next 30 Days</span></>}
+            {activeTab === 'within60' && <><Clock size={16} className="text-blue-600" /><span>Products Expiring in Next 60 Days</span></>}
           </h3>
         </div>
 

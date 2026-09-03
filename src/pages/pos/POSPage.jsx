@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Search, Barcode, X, Plus, Minus, ShoppingCart, User, Pause, Play,
-  Trash2, Printer, ChevronDown, Check, RotateCcw, Package, Sparkles
+  Trash2, Printer, ChevronDown, Check, RotateCcw, Package, Sparkles,
+  Phone, AlertCircle, Banknote, CreditCard, QrCode, FileText, Split, Clock, Scale, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -138,7 +139,10 @@ function CustomerSelector({ onSelect, onClose }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-bold text-sm text-gray-900">{c.name}</p>
-                  <p className="text-xs text-gray-500">📱 {c.mobile} · {c.customerId}</p>
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <Phone size={11} className="text-gray-400 shrink-0" />
+                    <span>{c.mobile} · {c.customerId}</span>
+                  </p>
                   {c.lastPurchaseAmount > 0 && <p className="text-xs text-gray-400">Last: {fmt(c.lastPurchaseAmount)}</p>}
                 </div>
                 {c.outstandingBalance > 0 && (
@@ -288,7 +292,10 @@ function SwitchCustomerPromptModal({ currentCart, targetCustomer, onHoldAndSwitc
 
         <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 text-xs text-amber-950 space-y-1.5">
           <p className="font-bold text-amber-900">
-            ⚠️ You are currently billing for <span className="underline font-extrabold">{currentCustName}</span>.
+            <span className="flex items-center gap-1.5 text-xs text-amber-900 font-semibold">
+              <AlertCircle size={14} className="text-amber-600 shrink-0" />
+              <span>You are currently billing for <span className="underline font-extrabold">{currentCustName}</span>.</span>
+            </span>
           </p>
           <p className="text-gray-600 text-[11px]">
             To serve <strong>{targetCustName}</strong>, hold the current bill in queue so you can resume it later without losing items.
@@ -400,11 +407,11 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
   const change = paid - grandTotal;
 
   const METHODS = [
-    { value: 'cash', label: '💵 Cash' },
-    { value: 'upi', label: '📱 UPI' },
-    { value: 'card', label: '💳 Card' },
-    { value: 'credit', label: '📋 Credit' },
-    { value: 'mixed', label: '🔀 Split' },
+    { value: 'cash', label: 'Cash', icon: Banknote },
+    { value: 'upi', label: 'UPI', icon: QrCode },
+    { value: 'card', label: 'Card', icon: CreditCard },
+    { value: 'credit', label: 'Credit', icon: FileText },
+    { value: 'mixed', label: 'Split', icon: Split },
   ];
 
   const handleComplete = async () => {
@@ -427,7 +434,10 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           </div>
           {customer && <p className="text-xs text-primary-200 mt-1">Customer: {customer.name} ({customer.mobile})</p>}
           {totalSavings > 0 && (
-            <p className="text-xs text-emerald-200 mt-1 font-semibold">🎉 Customer saves {fmt(totalSavings)} ({savingsPercentage}%)</p>
+            <p className="text-xs text-emerald-200 mt-1 font-semibold flex items-center gap-1.5">
+              <Tag size={12} />
+              <span>Customer saves {fmt(totalSavings)} ({savingsPercentage}%)</span>
+            </p>
           )}
         </div>
 
@@ -436,12 +446,16 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           <div>
             <label className="form-label">Payment Method</label>
             <div className="grid grid-cols-5 gap-1.5 mt-1">
-              {METHODS.map(m => (
-                <button key={m.value} type="button" onClick={() => setMethod(m.value)}
-                  className={clsx('text-xs py-2 px-1 rounded-lg border font-medium transition-all', method === m.value ? 'bg-primary-50 border-primary-400 text-primary-700 font-bold shadow-2xs' : 'border-gray-200 text-gray-600 hover:border-gray-300')}>
-                  {m.label}
-                </button>
-              ))}
+              {METHODS.map(m => {
+                const IconComp = m.icon;
+                return (
+                  <button key={m.value} type="button" onClick={() => setMethod(m.value)}
+                    className={clsx('text-xs py-2 px-1 rounded-lg border font-medium transition-all flex flex-col items-center justify-center gap-1', method === m.value ? 'bg-primary-50 border-primary-400 text-primary-700 font-bold shadow-2xs' : 'border-gray-200 text-gray-600 hover:border-gray-300')}>
+                    <IconComp size={14} />
+                    <span>{m.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -468,9 +482,12 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           )}
 
           {method === 'credit' && (
-            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">
-              ⚠️ This will add {fmt(grandTotal)} to customer's outstanding balance.
-              {customer?.outstandingBalance > 0 && <p className="mt-1">Current balance: {fmt(customer.outstandingBalance)}</p>}
+            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 flex items-start gap-2">
+              <AlertCircle size={16} className="text-orange-600 shrink-0 mt-0.5" />
+              <div>
+                <p>This will add {fmt(grandTotal)} to customer's outstanding balance.</p>
+                {customer?.outstandingBalance > 0 && <p className="mt-1 font-semibold">Current balance: {fmt(customer.outstandingBalance)}</p>}
+              </div>
             </div>
           )}
 
@@ -483,7 +500,7 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
         <div className="p-5 pt-0 flex gap-3">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleComplete} disabled={loading} className="btn-primary flex-1 py-3 text-base font-semibold">
-            {loading ? 'Processing...' : '✓ Complete Bill'}
+            {loading ? 'Processing...' : 'Complete Bill'}
           </button>
         </div>
       </div>
@@ -722,45 +739,26 @@ export default function POSPage() {
     setHighlightedItemId(pId);
 
     if (config.type === 'commodity_loose') {
-      const existingKg = cart.cartItems.find(i => (i._id || i.product) === pId);
-      const existingBag = cart.cartItems.find(i => (i._id || i.product)?.startsWith(`${pId}_bag`));
-      const existingItem = existingKg || existingBag;
-
-      if (existingItem) {
-        toast(`"${product.name}" is already in the bill (Qty: ${existingItem.quantity} ${existingItem.unit?.symbol || ''}). Modifying item.`, { icon: 'ℹ️' });
-      }
-
       setQuantityModal({
         product,
         config,
-        mode: existingBag ? 'bag' : 'kg', // 'kg' or 'bag'
-        kgQty: existingKg ? existingKg.quantity : 1,
-        bagQty: existingBag ? existingBag.quantity : 1,
-        selectedBagOption: config.defaultBagOption,
-        isExisting: !!existingItem,
-        existingItem,
+        mode: 'kg', // 'kg' or 'bag'
+        kgQty: 1,
+        bagQty: 1,
+        selectedBagOption: config.defaultBagOption || config.bagOptions?.[0],
+        isExisting: false,
       });
     } else {
-      const defaultOpt = config.selectedOption;
-      const itemKey = defaultOpt.id === '1L' || defaultOpt.id === '100g' || defaultOpt.id === '1pc'
-        ? pId
-        : `${pId}_${defaultOpt.id}`;
-      const existing = cart.cartItems.find(i => (i._id || i.product) === itemKey || (i._id || i.product) === pId || (i._id || i.product)?.startsWith(`${pId}_`));
-
-      if (existing) {
-        toast(`"${product.name}" is already in the bill (Qty: ${existing.quantity} ${existing.unit?.symbol || ''}). Modifying item.`, { icon: 'ℹ️' });
-      }
-
+      const defaultOpt = config.selectedOption || config.options?.[0];
       setQuantityModal({
         product,
         config,
         selectedOption: defaultOpt,
-        quantity: existing ? existing.quantity : 1,
-        isExisting: !!existing,
-        existingItem: existing,
+        quantity: 1,
+        isExisting: false,
       });
     }
-  }, [cart.cartItems, getProductVariantConfig]);
+  }, [getProductVariantConfig]);
 
   // Load all catalog products for the stable catalog view
   const fetchProductsCatalog = useCallback(async () => {
@@ -837,14 +835,19 @@ export default function POSPage() {
 
   const completeSale = async ({ method, cashAmt, upiAmt, paid, change, notes }) => {
     try {
-      const items = cart.cartItems.map(item => ({
-        product: item._id,
-        quantity: item.quantity,
-        sellingPrice: item.customPrice || item.sellingPrice,
-        mrp: item.mrp || item.customPrice || item.sellingPrice,
-        discount: item.discount || 0,
-        discountType: item.discountType || 'percent',
-      }));
+      const items = cart.cartItems.map(item => {
+        const baseProductId = item.productId || (typeof item._id === 'string' && item._id.includes('_') ? item._id.split('_')[0] : item._id);
+        return {
+          product: baseProductId,
+          productName: item.name,
+          unit: item.unit?.symbol || item.unit || '',
+          quantity: item.quantity,
+          sellingPrice: item.customPrice || item.sellingPrice,
+          mrp: item.mrp || item.customPrice || item.sellingPrice,
+          discount: item.discount || 0,
+          discountType: item.discountType || 'percent',
+        };
+      });
 
       const paymentDetails = method === 'mixed'
         ? [{ method: 'cash', amount: cashAmt }, { method: 'upi', amount: upiAmt }]
@@ -902,11 +905,11 @@ export default function POSPage() {
   };
 
   const CATEGORY_TABS = [
-    { key: 'all', label: '🛍️ All Items' },
-    { key: 'food', label: '🍚 Food' },
-    { key: 'beverages', label: '🥤 Beverages' },
-    { key: 'snacks', label: '🍿 Snacks' },
-    { key: 'household', label: '🧼 Household' },
+    { key: 'all', label: 'All Items' },
+    { key: 'food', label: 'Food & Staples' },
+    { key: 'beverages', label: 'Beverages' },
+    { key: 'snacks', label: 'Snacks & Biscuits' },
+    { key: 'household', label: 'Household Care' },
   ];
 
   const renderBillContent = () => (
@@ -993,7 +996,7 @@ export default function POSPage() {
         )}
       </div>
 
-      {/* Itemized Cart Products Cards (compact, clean spacing matching customer cart) */}
+      {/* Cart line items */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-white min-h-[200px]">
         {cart.cartItems.length === 0 ? (
           <div className="text-center py-10 text-gray-400">
@@ -1107,7 +1110,10 @@ export default function POSPage() {
         </div>
         {cart.totalSavings > 0 && (
           <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 flex items-center justify-between text-xs shadow-xs">
-            <span className="font-bold flex items-center gap-1.5">🎉 You Save:</span>
+            <span className="font-bold flex items-center gap-1.5">
+              <Tag size={13} className="text-emerald-700" />
+              <span>You Save:</span>
+            </span>
             <span className="font-black text-emerald-700 text-xs sm:text-sm">{fmt(cart.totalSavings)} ({cart.savingsPercentage}%)</span>
           </div>
         )}
@@ -1254,11 +1260,6 @@ export default function POSPage() {
             </div>
           ) : (
             displayedCatalogProducts.map(p => {
-              const inCartItem = cart.cartItems.find(i => {
-                const id = i._id || i.product;
-                return id === p._id || id?.startsWith(`${p._id}_`);
-              });
-              const inCartQty = inCartItem?.quantity || 0;
               const catName = getProductCategory(p);
               const unitName = p.unit?.symbol || p.unit?.name || '';
               const inStock = p.currentStock > 0;
@@ -1267,12 +1268,7 @@ export default function POSPage() {
                 <div
                   key={p._id}
                   onClick={() => handleSelectProduct(p)}
-                  className={clsx(
-                    'group p-3 sm:p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none',
-                    inCartQty > 0
-                      ? 'border-amber-400 bg-amber-50/20 shadow-xs hover:border-amber-500'
-                      : 'bg-white border-gray-200 hover:border-primary-400 hover:shadow-sm'
-                  )}
+                  className="group p-3 sm:p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none bg-white border-gray-200 hover:border-primary-400 hover:shadow-sm"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-sm text-gray-900 group-hover:text-primary-700 truncate leading-snug">
@@ -1307,23 +1303,10 @@ export default function POSPage() {
                       e.stopPropagation();
                       handleSelectProduct(p);
                     }}
-                    className={clsx(
-                      'btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center',
-                      inCartQty > 0
-                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                        : 'btn-primary'
-                    )}
+                    className="btn-primary btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center"
                   >
-                    {inCartQty > 0 ? (
-                      <>
-                        <span>✏️ In Cart: {inCartQty}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={14} />
-                        <span>Add / Packs</span>
-                      </>
-                    )}
+                    <Plus size={14} />
+                    <span>Add / Packs</span>
                   </button>
                 </div>
               );
@@ -1508,13 +1491,15 @@ export default function POSPage() {
                             <span className="font-bold text-xs bg-primary-100 text-primary-800 px-2 py-0.5 rounded-lg">
                               {bill.billNumber || 'HELD'}
                             </span>
-                            <span className="font-extrabold text-sm text-gray-900">
-                              👤 {custDisplayName} {custMobile ? `(${custMobile})` : ''}
+                            <span className="font-extrabold text-sm text-gray-900 flex items-center gap-1">
+                              <User size={13} className="text-gray-500 shrink-0" />
+                              <span>{custDisplayName} {custMobile ? `(${custMobile})` : ''}</span>
                             </span>
                           </div>
                           {bill.notes && (
-                            <p className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md mt-1 inline-block font-medium">
-                              📝 Note: {bill.notes}
+                            <p className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md mt-1 inline-flex items-center gap-1 font-medium">
+                              <FileText size={11} className="text-amber-700 shrink-0" />
+                              <span>Note: {bill.notes}</span>
                             </p>
                           )}
                         </div>
@@ -1525,13 +1510,17 @@ export default function POSPage() {
 
                       {/* Item details list preview */}
                       <div className="p-2 bg-white rounded-xl border border-gray-100 text-xs text-gray-600">
-                        <span className="font-bold text-gray-800">🛒 {bill.items?.length || 0} items: </span>
+                        <span className="font-bold text-gray-800 inline-flex items-center gap-1 mr-1">
+                          <ShoppingCart size={12} className="text-gray-700" />
+                          <span>{bill.items?.length || 0} items:</span>
+                        </span>
                         <span className="text-gray-500">{itemsPreview}</span>
                       </div>
 
                       <div className="flex items-center justify-between pt-1 text-[11px] text-gray-400">
-                        <span>
-                          🕒 Held at {new Date(bill.createdAt || bill.heldAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        <span className="inline-flex items-center gap-1">
+                          <Clock size={11} className="text-gray-400 shrink-0" />
+                          <span>Held at {new Date(bill.createdAt || bill.heldAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <button
@@ -1587,68 +1576,49 @@ export default function POSPage() {
           const bagName = `${product.name} (${selectedBagOption.label})`;
 
           const handleConfirm = () => {
-            // Find any existing variant of this base product in the cart
-            const anyExisting = cart.cartItems.find(i => {
-              const id = i._id || i.product;
-              return id === pId || id?.startsWith(`${pId}_`);
-            });
-
             if (mode === 'kg') {
-              if (anyExisting) {
-                const existingId = anyExisting._id || anyExisting.product;
-                if (existingId !== pId) {
-                  cart.removeItem(existingId);
-                  cart.addItem({
-                    ...product,
-                    _id: pId,
-                    name: product.name,
-                    sellingPrice: baseRate,
-                    customPrice: baseRate,
-                    unit: { symbol: 'kg' },
-                  }, currentKg);
-                } else {
-                  cart.updateItem(pId, 'quantity', currentKg);
-                  cart.updateItem(pId, 'customPrice', baseRate);
-                }
-                toast.success(`Updated ${product.name} (${currentKg} kg)`);
+              const kgKey = `${pId}_kg`;
+              const existingKg = cart.cartItems.find(i => (i._id || i.product) === kgKey || (i._id === pId && (i.unit?.symbol === 'kg' || i.unit === 'kg')));
+
+              if (existingKg) {
+                const targetKey = existingKg._id || existingKg.product;
+                const newQty = Math.round(((existingKg.quantity || 0) + currentKg) * 100) / 100;
+                cart.updateItem(targetKey, 'quantity', newQty);
+                toast.success(`Increased ${product.name} to ${newQty} kg`);
+                setHighlightedItemId(targetKey);
               } else {
                 cart.addItem({
                   ...product,
-                  _id: pId,
-                  name: product.name,
+                  _id: kgKey,
+                  productId: pId,
+                  name: `${product.name} (Loose)`,
                   sellingPrice: baseRate,
                   customPrice: baseRate,
                   unit: { symbol: 'kg' },
+                  subcategory: 'Loose kg',
                 }, currentKg);
                 toast.success(`Added ${currentKg} kg × ${product.name} to bill`);
+                setHighlightedItemId(kgKey);
               }
-              setHighlightedItemId(pId);
             } else {
-              if (anyExisting) {
-                const existingId = anyExisting._id || anyExisting.product;
-                if (existingId !== bagKey) {
-                  cart.removeItem(existingId);
-                  cart.addItem({
-                    ...product,
-                    _id: bagKey,
-                    name: bagName,
-                    sellingPrice: selectedBagOption.price,
-                    customPrice: selectedBagOption.price,
-                    unit: { symbol: selectedBagOption.label },
-                  }, currentBags);
-                } else {
-                  cart.updateItem(bagKey, 'quantity', currentBags);
-                  cart.updateItem(bagKey, 'customPrice', selectedBagOption.price);
-                }
-                toast.success(`Updated ${bagName} (${currentBags} Bags)`);
+              const bagKey = `${pId}_${selectedBagOption.id}`;
+              const bagName = `${product.name} (${selectedBagOption.label})`;
+              const existingBag = cart.cartItems.find(i => (i._id || i.product) === bagKey);
+
+              if (existingBag) {
+                const newQty = (existingBag.quantity || 0) + currentBags;
+                cart.updateItem(bagKey, 'quantity', newQty);
+                toast.success(`Increased ${bagName} to ${newQty} Bags`);
               } else {
                 cart.addItem({
                   ...product,
                   _id: bagKey,
+                  productId: pId,
                   name: bagName,
                   sellingPrice: selectedBagOption.price,
                   customPrice: selectedBagOption.price,
                   unit: { symbol: selectedBagOption.label },
+                  subcategory: selectedBagOption.label,
                 }, currentBags);
                 toast.success(`Added ${currentBags} × ${bagName} to bill`);
               }
@@ -1694,7 +1664,7 @@ export default function POSPage() {
                   {/* Already In Bill Alert Banner */}
                   {quantityModal.isExisting && (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
-                      <span className="text-base shrink-0">⚠️</span>
+                      <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-extrabold text-amber-950">Already in this bill!</p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
@@ -1716,7 +1686,8 @@ export default function POSPage() {
                           : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                       )}
                     >
-                      <span>🍚 Loose by Weight (KG)</span>
+                      <Scale size={14} />
+                      <span>Loose by Weight (kg)</span>
                     </button>
                     <button
                       type="button"
@@ -1728,7 +1699,8 @@ export default function POSPage() {
                           : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                       )}
                     >
-                      <span>📦 Whole Bags</span>
+                      <Package size={14} />
+                      <span>Whole Bags</span>
                     </button>
                   </div>
 
@@ -1919,7 +1891,7 @@ export default function POSPage() {
                       onClick={handleConfirm}
                       className="btn-primary py-2.5 rounded-xl font-bold text-xs tracking-wide cursor-pointer shadow-md"
                     >
-                      {quantityModal.isExisting ? 'Update in Bill' : 'Add to Bill'}
+                      Add to Bill
                     </button>
                   </div>
                 </div>
@@ -1933,44 +1905,29 @@ export default function POSPage() {
         const currentQty = Number(quantity) || 1;
         const lineTotal = currentQty * selectedOption.price;
 
-        const itemKey = selectedOption.id === '1L' || selectedOption.id === '100g' || selectedOption.id === '1pc'
-          ? pId
-          : `${pId}_${selectedOption.id}`;
-        const itemName = selectedOption.id === '1L' || selectedOption.id === '100g' || selectedOption.id === '1pc'
-          ? product.name
-          : `${product.name} (${selectedOption.label})`;
+        const itemKey = `${pId}_${selectedOption.id}`;
+        const itemName = `${product.name} (${selectedOption.label})`;
 
         const handleConfirm = () => {
-          const anyExisting = cart.cartItems.find(i => {
-            const id = i._id || i.product;
-            return id === pId || id === itemKey || id?.startsWith(`${pId}_`);
-          });
+          // Check if same product AND same subcategory is already in cart
+          const existingSameVariant = cart.cartItems.find(i => (i._id || i.product) === itemKey);
 
-          if (anyExisting) {
-            const existingId = anyExisting._id || anyExisting.product;
-            if (existingId !== itemKey) {
-              cart.removeItem(existingId);
-              cart.addItem({
-                ...product,
-                _id: itemKey,
-                name: itemName,
-                sellingPrice: selectedOption.price,
-                customPrice: selectedOption.price,
-                unit: { symbol: selectedOption.label },
-              }, currentQty);
-            } else {
-              cart.updateItem(itemKey, 'quantity', currentQty);
-              cart.updateItem(itemKey, 'customPrice', selectedOption.price);
-            }
-            toast.success(`Updated ${itemName} (Qty: ${currentQty})`);
+          if (existingSameVariant) {
+            // Same product and same subcategory -> INCREASE QUANTITY
+            const newQty = (existingSameVariant.quantity || 0) + currentQty;
+            cart.updateItem(itemKey, 'quantity', newQty);
+            toast.success(`Increased ${itemName} quantity to ${newQty}`);
           } else {
+            // Different subcategory (e.g. 2L vs 1L) -> MAKE IT A NEW PRODUCT IN CART
             cart.addItem({
               ...product,
               _id: itemKey,
+              productId: pId,
               name: itemName,
               sellingPrice: selectedOption.price,
               customPrice: selectedOption.price,
               unit: { symbol: selectedOption.label },
+              subcategory: selectedOption.label,
             }, currentQty);
             toast.success(`Added ${currentQty} × ${itemName} to bill`);
           }
@@ -2023,7 +1980,7 @@ export default function POSPage() {
                 {/* Already In Bill Alert Banner */}
                 {quantityModal.isExisting && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs mb-4">
-                  <span className="text-base shrink-0">⚠️</span>
+                  <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <p className="font-extrabold text-amber-950">Already in this bill!</p>
                     <p className="text-[11px] text-amber-800 mt-0.5">
@@ -2139,7 +2096,7 @@ export default function POSPage() {
                   onClick={handleConfirm}
                   className="btn-primary py-2.5 rounded-xl font-bold text-xs tracking-wide cursor-pointer shadow-md"
                 >
-                  {quantityModal.isExisting ? 'Update in Bill' : 'Add to Bill'}
+                  Add to Bill
                 </button>
               </div>
             </div>

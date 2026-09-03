@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Minus, Check, Package, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Plus, Minus, Check, Package, Sparkles, AlertCircle, Scale } from 'lucide-react';
 import { getProductVariantConfig } from '../../utils/groceryVariants';
 
 export default function QuantityPackagingModal({ product, existingCartItem, onConfirm, onClose }) {
@@ -8,38 +8,15 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
   const cfg = getProductVariantConfig(product);
   const baseRate = Number(product.sellingPrice || 0);
 
-  // Commodity Loose State - Pre-populate if already in cart
-  const initialLooseMode = existingCartItem?.packDetails?.mode || 'kg';
-  const [looseMode, setLooseMode] = useState(initialLooseMode); // 'kg' or 'bag'
-  const [looseKgQty, setLooseKgQty] = useState(
-    initialLooseMode === 'kg' && existingCartItem?.quantity
-      ? String(existingCartItem.quantity)
-      : '1'
-  );
-  const [selectedBag, setSelectedBag] = useState(() => {
-    if (initialLooseMode === 'bag' && existingCartItem) {
-      const foundBag = cfg.bagOptions?.find(b => b.label === existingCartItem.packDetails?.optionLabel || b.id === existingCartItem.packDetails?.optionLabel);
-      if (foundBag) return foundBag.id;
-    }
-    return cfg.bagOptions?.[0]?.id || 'bag_25';
-  });
-  const [bagCountQty, setBagCountQty] = useState(
-    initialLooseMode === 'bag' && existingCartItem?.quantity
-      ? String(existingCartItem.quantity)
-      : '1'
-  );
+  // Commodity Loose State
+  const [looseMode, setLooseMode] = useState('kg'); // 'kg' or 'bag'
+  const [looseKgQty, setLooseKgQty] = useState('1');
+  const [selectedBag, setSelectedBag] = useState(cfg.bagOptions?.[0]?.id || 'bag_25');
+  const [bagCountQty, setBagCountQty] = useState('1');
 
-  // Packaged Options State (Liquid, Masala, Snack, General) - Pre-populate if already in cart
-  const [selectedOptId, setSelectedOptId] = useState(() => {
-    if (existingCartItem?.packDetails?.optionLabel) {
-      const foundOpt = cfg.options?.find(o => o.label === existingCartItem.packDetails.optionLabel || o.id === existingCartItem.packDetails.optionLabel);
-      if (foundOpt) return foundOpt.id;
-    }
-    return cfg.selectedOption?.id || cfg.options?.[0]?.id || '';
-  });
-  const [packQty, setPackQty] = useState(
-    existingCartItem?.quantity ? String(existingCartItem.quantity) : '1'
-  );
+  // Packaged Options State (Liquid, Masala, Snack, General)
+  const [selectedOptId, setSelectedOptId] = useState(cfg.selectedOption?.id || cfg.options?.[0]?.id || '');
+  const [packQty, setPackQty] = useState('1');
 
   // Current selected option object
   const currentPackOption = cfg.options?.find(o => o.id === selectedOptId) || cfg.options?.[0];
@@ -82,8 +59,14 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
   const computedTotal = Math.round(computedRate * computedQty);
 
   const handleConfirm = () => {
+    const optionId = cfg.type === 'commodity_loose'
+      ? (looseMode === 'kg' ? 'kg' : currentBagOption?.id)
+      : currentPackOption?.id;
+    const variantKey = `${product._id}_${optionId || 'default'}`;
+
     onConfirm({
       product,
+      variantKey,
       name: computedItemName,
       sellingPrice: computedRate,
       quantity: computedQty,
@@ -91,6 +74,7 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
       packDetails: {
         mode: looseMode,
         variantType: cfg.type,
+        optionId,
         optionLabel: cfg.type === 'commodity_loose' ? (looseMode === 'kg' ? `${computedQty} kg` : currentBagOption?.label) : currentPackOption?.label,
       },
     });
@@ -106,10 +90,10 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`p-4 text-white flex items-center justify-between ${existingCartItem ? 'bg-gradient-to-r from-amber-600 to-amber-700' : 'bg-gradient-to-r from-primary-600 to-primary-700'}`}>
+        <div className="p-4 text-white flex items-center justify-between bg-gradient-to-r from-primary-600 to-primary-700">
           <div className="min-w-0 pr-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-white/80">
-              {existingCartItem ? '✏️ Modify Product in Cart' : 'Select Packaging & Quantity'}
+              Select Packaging & Quantity
             </span>
             <h3 className="font-extrabold text-base sm:text-lg truncate">{product.name}</h3>
             <p className="text-xs text-white/80">Base Price: ₹{baseRate} / {product.unit?.symbol || 'unit'}</p>
@@ -123,19 +107,7 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
         </div>
 
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
-          {/* Already In Cart Alert Banner */}
-          {existingCartItem && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs animate-in fade-in">
-              <span className="text-base shrink-0">⚠️</span>
-              <div className="min-w-0">
-                <p className="font-black text-amber-950">Already in your cart!</p>
-                <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
-                  Currently added as <span className="font-bold text-amber-950">{existingCartItem.name} ({existingCartItem.quantity} {existingCartItem.unit})</span>. Modify the quantity or pack below to update it.
-                </p>
-              </div>
-            </div>
-          )}
-          {/* 1. Commodity Loose (Rice, Sugar, Atta, Dals) */}
+          {/* Loose / bulk quantity input */}
           {cfg.type === 'commodity_loose' && (
             <div className="space-y-3.5">
               {/* Mode Switcher: Active mode is active, the other is blocked/hidden */}
@@ -149,7 +121,8 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
                       : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                   }`}
                 >
-                  <span>🍚 Loose by Weight (KG)</span>
+                  <Scale size={14} />
+                  <span>Loose by Weight (kg)</span>
                 </button>
                 <button
                   type="button"
@@ -160,7 +133,8 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
                       : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                   }`}
                 >
-                  <span>📦 Whole Bags</span>
+                  <Package size={14} />
+                  <span>Whole Bags</span>
                 </button>
               </div>
 
@@ -281,7 +255,7 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
             </div>
           )}
 
-          {/* 2. Packaged Options (Water bottles, Oils, Spices, Biscuits, General FMCG) */}
+          {/* Packaged quantity selector */}
           {cfg.type !== 'commodity_loose' && (
             <div className="space-y-3.5">
               <label className="text-xs font-bold text-gray-800 block">
@@ -371,10 +345,10 @@ export default function QuantityPackagingModal({ product, existingCartItem, onCo
           <button
             type="button"
             onClick={handleConfirm}
-            className={`py-2.5 px-5 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-xs text-white ${existingCartItem ? 'bg-amber-600 hover:bg-amber-700' : 'btn-primary'}`}
+            className="btn-primary py-2.5 px-5 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-xs text-white"
           >
-            {existingCartItem ? <Check size={15} /> : <Plus size={15} />}
-            <span>{existingCartItem ? `Update Cart (₹${computedTotal})` : `Add to Cart (₹${computedTotal})`}</span>
+            <Plus size={15} />
+            <span>Add to Cart (₹{computedTotal})</span>
           </button>
         </div>
       </div>

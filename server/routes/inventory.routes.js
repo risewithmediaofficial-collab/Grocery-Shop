@@ -98,7 +98,7 @@ router.post('/adjust', protect, authorize('admin', 'manager', 'cashier'), async 
       try {
         await Notification.create({
           type: 'stock_adjustment',
-          title: '⚠️ Unbilled Stock Reduction',
+          title: 'Unbilled Stock Reduction',
           message: `${req.user.name || 'Staff'} reduced stock of "${product.name}" from ${currentStock} to ${newStock} (-${unitsReduced} units). Reason: ${reason}${notes ? ` (${notes})` : ''}`,
           severity: 'warning',
           forRoles: ['admin'],

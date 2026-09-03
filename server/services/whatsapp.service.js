@@ -101,7 +101,7 @@ async function sendWhatsAppMessage({
       metadata,
     });
 
-    console.log(`[WhatsApp Automation ✅] Sent ${template} message to +91 ${cleanPhone}`);
+    console.log(`[WhatsApp Automation] Sent ${template} message to +91 ${cleanPhone}`);
     return { success: true, log };
   } catch (err) {
     console.error('[WhatsApp Service Error]', err);
@@ -127,23 +127,22 @@ async function sendOrderPlacedAutoMessage(order) {
     return `${idx + 1}. *${name}* × ${qty} ${unit}`;
   }).join('\n');
 
-  const text = `🛒 *${STORE_CONFIG.name}*
-📍 _${STORE_CONFIG.location}_
+  const text = `*${STORE_CONFIG.name}*
+_${STORE_CONFIG.location}_
 
-Hello *${customerName}*, your grocery order has been received! 🙏
+Hello *${customerName}*, your grocery order has been received.
 
-📋 *Order Details:*
+*Order Details:*
 • *Order ID:* #${orderNum}
-• *Status:* ⏳ Received & Under Review
+• *Status:* Received & Under Review
 • *Delivery to:* ${address}${order.deliveryCharge > 0 ? `\n• *Delivery Charges:* ₹${order.deliveryCharge}` : ''}
 
-🛍️ *Items Ordered:*
+*Items Ordered:*
 ${itemsList}
 
-${order.notes ? `📝 *Notes:* ${order.notes}\n` : ''}
-📦 Our store staff is packing your items.
-📞 *Store Helpline:* ${STORE_CONFIG.phone}
-Thank you for ordering with us! ✨`;
+${order.notes ? `*Notes:* ${order.notes}\n` : ''}Our store staff is packing your items.
+*Store Helpline:* ${STORE_CONFIG.phone}
+Thank you for ordering with us.`;
 
   return sendWhatsAppMessage({
     to: order.customerMobile,
@@ -171,28 +170,28 @@ async function sendOrderStatusAutoMessage(order, newStatus) {
 
   if (newStatus === 'ready') {
     template = 'order_ready';
-    text = `🎉 *${STORE_CONFIG.name} - Order Ready!*
+    text = `*${STORE_CONFIG.name} - Order Ready*
 
 Hello *${customerName}*, your grocery order *#${orderNum}* is completely packed and ready for pickup at our counter:
-📍 *${STORE_CONFIG.name}, ${STORE_CONFIG.location}*
+*${STORE_CONFIG.name}, ${STORE_CONFIG.location}*
 
-📞 *Store Helpline:* ${STORE_CONFIG.phone}`;
+*Store Helpline:* ${STORE_CONFIG.phone}`;
   } else if (newStatus === 'out_for_delivery') {
     template = 'out_for_delivery';
-    text = `🚚 *${STORE_CONFIG.name} - Out for Delivery!*
+    text = `*${STORE_CONFIG.name} - Out for Delivery*
 
 Hi *${customerName}*, your order *#${orderNum}* is packed and currently on the way to:
-📍 *${address}*
+*${address}*
 
-📦 Our delivery agent will reach you shortly.
-📞 *Helpline:* ${STORE_CONFIG.phone}`;
+Our delivery agent will reach you shortly.
+*Helpline:* ${STORE_CONFIG.phone}`;
   } else if (newStatus === 'delivered') {
     template = 'order_delivered';
-    text = `✅ *${STORE_CONFIG.name} - Order Delivered!*
+    text = `*${STORE_CONFIG.name} - Order Delivered*
 
 Dear *${customerName}*, your order *#${orderNum}* has been successfully delivered/collected.
 
-Thank you for shopping at *${STORE_CONFIG.name}*! Have a wonderful day ahead! 🌟`;
+Thank you for shopping at *${STORE_CONFIG.name}*! Have a wonderful day ahead.`;
   } else {
     return; // Don't send for intermediate unnotified statuses
   }
@@ -243,29 +242,29 @@ async function sendSaleInvoiceAutoMessage(sale) {
 
   let savingsText = '';
   if (totalSaved > 0) {
-    savingsText = `\n🎉 *YOU SAVED: ₹${Number(totalSaved).toLocaleString('en-IN')} (${savingsPct}%) ON THIS PURCHASE!* 🌟\n`;
+    savingsText = `\n*YOU SAVED: ₹${Number(totalSaved).toLocaleString('en-IN')} (${savingsPct}%) ON THIS PURCHASE!*\n`;
   }
   let discountText = '';
   if (billDiscount > 0) {
-    discountText = `🏷️ *Discount (${discountPct}%):* -₹${Number(billDiscount).toLocaleString('en-IN')}\n`;
+    discountText = `*Discount (${discountPct}%):* -₹${Number(billDiscount).toLocaleString('en-IN')}\n`;
   }
 
-  const text = `🧾 *${STORE_CONFIG.name} - Digital Tax Invoice*
-📍 _${STORE_CONFIG.location}_
+  const text = `*${STORE_CONFIG.name} - Digital Tax Invoice*
+_${STORE_CONFIG.location}_
 
 Hello *${customerName}*, here is your grocery purchase receipt:
 
-📄 *Invoice #:* ${invoiceNum}
-🛍️ *Purchased Items:*
+*Invoice #:* ${invoiceNum}
+*Purchased Items:*
 ${itemsList}
 
-💵 *Subtotal:* ₹${Number(sale.subtotal || 0).toLocaleString('en-IN')}
-${discountText}📊 *GST Tax:* ₹${Number(sale.totalTax || 0).toLocaleString('en-IN')}
-💰 *Grand Total:* *₹${total}*
-💳 *Paid Via:* ${paymentMethod}
+*Subtotal:* ₹${Number(sale.subtotal || 0).toLocaleString('en-IN')}
+${discountText}*GST Tax:* ₹${Number(sale.totalTax || 0).toLocaleString('en-IN')}
+*Grand Total:* *₹${total}*
+*Paid Via:* ${paymentMethod}
 ${savingsText}
-📞 *Store Contact:* ${STORE_CONFIG.phone}
-Thank you for shopping with *${STORE_CONFIG.name}*! 🙏`;
+*Store Contact:* ${STORE_CONFIG.phone}
+Thank you for shopping with *${STORE_CONFIG.name}*!`;
 
   return sendWhatsAppMessage({
     to: sale.customerMobile,

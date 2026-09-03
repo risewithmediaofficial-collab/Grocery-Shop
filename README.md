@@ -4,7 +4,7 @@ Complete, production-quality Grocery Shop Inventory, Stock, Purchase, Order & Bi
 
 ---
 
-## 🛒 Features
+## Features
 
 - **POS Billing**: Fast keyboard-navigable POS with live barcode scanning, customer search/disambiguation, and repeat purchase draft creation.
 - **Product Management**: Full CRUD, HSN codes, product-level GST rates (0%, 5%, 12%, 18%, 28%), tax inclusive/exclusive modes, and stock alert levels.
@@ -22,14 +22,14 @@ Complete, production-quality Grocery Shop Inventory, Stock, Purchase, Order & Bi
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Frontend**: React 19, Vite, Tailwind CSS, React Router v7, Axios, Recharts, Lucide Icons, React Hot Toast
 - **Backend**: Node.js, Express.js, MongoDB, Mongoose, JWT Authentication, Helmet, Morgan, Express-Rate-Limit
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Backend Setup
 
@@ -50,7 +50,7 @@ npm run dev      # Starts frontend on http://localhost:5173
 
 ---
 
-## 🔐 Default Demo Logins
+## Default Credentials
 
 | Role | Email | Password | Permissions |
 |---|---|---|---|
@@ -59,7 +59,7 @@ npm run dev      # Starts frontend on http://localhost:5173
 
 ---
 
-## 🛒 Ordering System Logic & Activation
+## Ordering System Logic & Workflow
 
 The application includes an **Ordering System** ready to be used:
 1. Customers browse available grocery items from live stock and add them to their grocery cart.

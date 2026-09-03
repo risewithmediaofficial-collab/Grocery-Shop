@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, MapPin, DollarSign, ShoppingBag, Receipt, RotateCcw, CreditCard, Clock, Plus } from 'lucide-react';
+import { ArrowLeft, User, Phone, MapPin, DollarSign, ShoppingBag, Receipt, RotateCcw, CreditCard, Clock, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useCart } from '../../context/CartContext';
@@ -85,7 +85,11 @@ export default function CustomerDetailPage() {
         <Link to="/customers" className="btn-secondary btn-sm"><ArrowLeft size={16} /></Link>
         <div>
           <h1 className="page-title">{customer.name}</h1>
-          <p className="page-subtitle">Customer ID: {customer.customerId} · 📱 {customer.mobile}</p>
+          <p className="page-subtitle flex items-center gap-1.5 flex-wrap">
+            <span>Customer ID: {customer.customerId}</span>
+            <span>·</span>
+            <span className="flex items-center gap-1"><Phone size={12} className="text-gray-400" /> {customer.mobile}</span>
+          </p>
         </div>
         <div className="ml-auto flex gap-2">
           {customer.outstandingBalance > 0 && (
@@ -265,7 +269,7 @@ export default function CustomerDetailPage() {
           <div className="bg-white rounded-xl max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-bold text-gray-900">Record Payment for {customer.name}</h3>
-              <button onClick={() => setShowPaymentModal(false)}>✕</button>
+              <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
             </div>
             <form onSubmit={handleRecordPayment} className="p-4 space-y-3">
               <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm flex justify-between">

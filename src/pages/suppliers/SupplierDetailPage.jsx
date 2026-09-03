@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ShoppingBag, CreditCard, DollarSign, Calendar, Truck } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, CreditCard, DollarSign, Calendar, Truck, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import clsx from 'clsx';
@@ -88,7 +88,7 @@ export default function SupplierDetailPage() {
         </div>
         <div className="card p-5">
           <p className="text-xs font-bold text-gray-500 uppercase">Contact & GSTIN</p>
-          <p className="text-sm font-semibold text-gray-900 mt-1">📱 {supplier.mobile}</p>
+          <p className="text-sm font-semibold text-gray-900 mt-1 flex items-center gap-1.5"><Phone size={13} className="text-gray-400" /> {supplier.mobile}</p>
           <p className="text-xs text-gray-500">{supplier.gstin ? `GST: ${supplier.gstin}` : 'No GST provided'}</p>
         </div>
         <div className="card p-5">
@@ -145,7 +145,7 @@ export default function SupplierDetailPage() {
           <div className="bg-white rounded-xl max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-bold text-gray-900">Pay Supplier: {supplier.name}</h3>
-              <button onClick={() => setShowPaymentModal(false)}>✕</button>
+              <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
             </div>
             <form onSubmit={handleRecordPayment} className="p-4 space-y-3">
               <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm flex justify-between">

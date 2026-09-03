@@ -222,33 +222,74 @@
   .print-only { display: none; }
 }
 
-/* Order Live Tracking Animations - Premium Compact Tri-Color Palette */
+/* Order Tracking Animations — Rapido Style Live Delivery Tracking */
 @keyframes delivery-travel {
   0% {
     left: 36px;
     opacity: 0;
-    transform: translateY(-50%) scale(0.9);
+    transform: translateY(-50%) scale(0.85);
   }
-  12% {
+  8% {
     opacity: 1;
     transform: translateY(-50%) scale(1);
   }
-  80% {
-    left: calc(100% - 68px);
+  35% {
+    left: 38%;
+    transform: translateY(-52%) scale(1.02);
+  }
+  65% {
+    left: 62%;
+    transform: translateY(-48%) scale(1);
+  }
+  82% {
+    left: 70%;
     opacity: 1;
     transform: translateY(-50%) scale(1);
   }
-  90% {
-    left: calc(100% - 60px);
-    opacity: 0.6;
-    transform: translateY(-50%) scale(0.95);
+  92% {
+    left: 70%;
+    opacity: 1;
+    transform: translateY(-50%) scale(0.98);
   }
-  98% {
+  97% {
     opacity: 0;
-    left: calc(100% - 54px);
+    left: 70%;
+    transform: translateY(-50%) scale(0.9);
   }
   100% {
     left: 36px;
+    opacity: 0;
+  }
+}
+
+@keyframes delivery-trail {
+  0% {
+    width: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  35% {
+    width: calc(38% - 24px);
+  }
+  65% {
+    width: calc(62% - 24px);
+  }
+  82% {
+    width: calc(70% - 24px);
+    opacity: 1;
+  }
+  92% {
+    width: calc(70% - 24px);
+    opacity: 0.95;
+  }
+  97% {
+    opacity: 0;
+    width: calc(70% - 24px);
+  }
+  100% {
+    width: 0%;
     opacity: 0;
   }
 }
@@ -360,7 +401,11 @@
 }
 
 .animate-delivery-travel {
-  animation: delivery-travel 3.8s cubic-bezier(0.35, 0.1, 0.25, 1) infinite;
+  animation: delivery-travel 4.5s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+}
+
+.animate-delivery-trail {
+  animation: delivery-trail 4.5s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
 }
 
 .animate-road-dash {

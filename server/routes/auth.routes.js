@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const auditService = require('../services/audit.service');
 
 const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
 
@@ -32,6 +33,13 @@ router.post('/login', async (req, res) => {
 
     user.lastLogin = new Date();
     await user.save();
+
+    await auditService.log({
+      user,
+      action: 'user_login',
+      module: 'auth',
+      description: `${user.name} (${user.role}) signed in to system`
+    });
 
     res.json({ success: true, token: generateToken(user._id), user });
   } catch (err) {

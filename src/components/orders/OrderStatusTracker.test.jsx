@@ -66,7 +66,7 @@ describe('OrderStatusTracker Component', () => {
     render(<OrderStatusTracker order={order} />);
 
     expect(screen.getByText(/Delivered Successfully/i)).toBeInTheDocument();
-    expect(screen.getByText(/Handed over at/i)).toBeInTheDocument();
-    expect(screen.getByText(/Indiranagar/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Indiranagar/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Arrived at destination/i)).toBeInTheDocument();
   });
 });

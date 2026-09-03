@@ -75,7 +75,7 @@ describe('SaleDetailPage Print & Action Buttons', () => {
     expect(screen.getByRole('button', { name: /Repeat & Edit \(POS\)/i })).toBeInTheDocument();
 
     // Toggle to thermal slip mode
-    const thermalTab = screen.getByRole('button', { name: /🧾 Thermal Slip/i });
+    const thermalTab = screen.getByRole('button', { name: /^Thermal Slip$/i });
     await act(async () => {
       fireEvent.click(thermalTab);
     });

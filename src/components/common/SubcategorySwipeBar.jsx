@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
-import { SUBCATEGORY_ICONS } from '../../utils/groceryVariants';
+import CategoryIcon from './CategoryIcon';
 
 /**
  * SubcategorySwipeBar
@@ -95,8 +95,8 @@ export default function SubcategorySwipeBar({
             ({subCategories.length - 1} available)
           </span>
         </span>
-        <span className="text-[10px] font-bold text-gray-400 normal-case tracking-normal hidden sm:inline-flex items-center gap-1">
-          <span>👈 Swipe or click arrows 👉</span>
+        <span className="text-[10px] font-semibold text-gray-400 normal-case tracking-normal hidden sm:inline-flex items-center gap-1">
+          <span>Scroll or use arrows</span>
         </span>
       </div>
 
@@ -134,7 +134,6 @@ export default function SubcategorySwipeBar({
         >
           {subCategories.map(sub => {
             const isSelected = selectedSubCategory.toLowerCase() === sub.toLowerCase();
-            const icon = SUBCATEGORY_ICONS[sub.toLowerCase()] || '🏷️';
             const label = sub === 'all' ? 'All Subcategories' : sub;
 
             return (
@@ -153,7 +152,7 @@ export default function SubcategorySwipeBar({
                     : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                 )}
               >
-                <span className="text-sm shrink-0">{icon}</span>
+                <CategoryIcon name={sub} size={14} className="shrink-0" />
                 <span>{label}</span>
               </button>
             );

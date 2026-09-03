@@ -5,13 +5,14 @@ import {
   ShoppingCart, Package, CheckCircle, Clock, Search, Plus, Minus,
   X, ExternalLink, RefreshCw, Send, Copy, Phone, MapPin, Eye,
   Loader2, Truck, CheckCheck, FileText, ChevronRight, User, AlertCircle,
-  CheckCircle2, Layers, ShieldCheck
+  CheckCircle2, Layers, ShieldCheck, Store
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import clsx from 'clsx';
+import CategoryIcon from '../../components/common/CategoryIcon';
 
 import {
   getProductCategory,
@@ -197,97 +198,68 @@ export default function OrdersPage() {
 
   // Cart operations with single entry per product & modify workflow
   const handleOpenPackaging = (prod) => {
-    const prodId = prod._id;
-    const existingEntry = Object.entries(customerCart).find(([k, v]) => {
-      if (k === prodId || k.startsWith(`${prodId}_`)) return true;
-      const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-      return vProdId === prodId;
-    });
-
-    const existingItem = existingEntry ? existingEntry[1] : null;
-
-    if (existingItem) {
-      const qty = typeof existingItem === 'object' ? existingItem.quantity : existingItem;
-      const unit = typeof existingItem === 'object' ? existingItem.unit : (prod.unit?.symbol || 'unit');
-      toast(`"${prod.name}" is already in this order (Qty: ${qty} ${unit}). Modifying item.`, { icon: 'ℹ️' });
-    }
     setSelectedProductForPackaging(prod);
   };
 
   const handleAddWithPackaging = (packData) => {
-    const { product, name, sellingPrice, quantity, unit, packDetails } = packData;
+    const { product, name, sellingPrice, quantity, unit, packDetails, variantKey } = packData;
     const productId = product._id;
+    const targetKey = variantKey || `${productId}_${packDetails?.optionId || unit || 'default'}`;
 
     setCustomerCart(prev => {
-      // Remove any existing duplicate or variant entries for this base product
-      const nextCart = {};
-      let wasExisting = false;
-
-      for (const [k, v] of Object.entries(prev)) {
-        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        if (k === productId || vProdId === productId || k.startsWith(`${productId}_`)) {
-          wasExisting = true;
-        } else {
-          nextCart[k] = v;
-        }
+      const existing = prev[targetKey];
+      if (existing) {
+        // Same product and same subcategory -> increase quantity
+        const updatedQty = (existing.quantity || 0) + quantity;
+        toast.success(`Increased ${name} to ${updatedQty} ${unit}`);
+        return {
+          ...prev,
+          [targetKey]: {
+            ...existing,
+            quantity: updatedQty,
+          },
+        };
       }
 
-      // Add strictly one updated entry for this product
-      nextCart[productId] = {
-        productId,
-        product,
-        name,
-        sellingPrice,
-        quantity,
-        unit,
-        packDetails,
+      // Different subcategory -> add as new line item in cart
+      toast.success(`Added ${quantity} ${unit} of ${name} to order!`);
+      return {
+        ...prev,
+        [targetKey]: {
+          productId,
+          product,
+          name,
+          sellingPrice,
+          quantity,
+          unit,
+          packDetails,
+        },
       };
-
-      if (wasExisting) {
-        toast.success(`Updated ${name} in order: ${quantity} ${unit} (₹${Math.round(sellingPrice * quantity)})`);
-      } else {
-        toast.success(`Added ${quantity} ${unit} of ${name} to order!`);
-      }
-
-      return nextCart;
     });
   };
 
   const updateQty = (key, delta) => {
     setCustomerCart(prev => {
-      // Find key or matching productId
-      const matchingKey = Object.keys(prev).find(k => {
-        if (k === key) return true;
-        const v = prev[k];
-        const vId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        return vId === key || k.startsWith(`${key}_`);
-      }) || key;
-
-      const item = prev[matchingKey];
+      const item = prev[key];
       if (item === undefined) return prev;
       const currentQty = typeof item === 'object' ? (item.quantity || 1) : Number(item);
       const nextQty = Math.max(0, currentQty + delta);
       if (nextQty === 0) {
         const copy = { ...prev };
-        delete copy[matchingKey];
+        delete copy[key];
         return copy;
       }
       if (typeof item === 'object') {
-        return { ...prev, [matchingKey]: { ...item, quantity: nextQty } };
+        return { ...prev, [key]: { ...item, quantity: nextQty } };
       }
-      return { ...prev, [matchingKey]: nextQty };
+      return { ...prev, [key]: nextQty };
     });
   };
 
   const removeCartItem = (key) => {
     setCustomerCart(prev => {
-      const copy = {};
-      for (const [k, v] of Object.entries(prev)) {
-        const vProdId = typeof v === 'object' ? (v.productId || v.product?._id) : k.split('_')[0];
-        if (k !== key && vProdId !== key && !k.startsWith(`${key}_`)) {
-          copy[k] = v;
-        }
-      }
+      const copy = { ...prev };
+      delete copy[key];
       return copy;
     });
   };
@@ -296,7 +268,7 @@ export default function OrdersPage() {
     if (typeof val === 'object' && val !== null) {
       const pId = val.productId || val.product?._id || key.split('_')[0] || key;
       return {
-        key: pId,
+        key,
         productId: pId,
         product: val.product || catalog.find(p => p._id === pId),
         name: val.name || val.product?.name || 'Item',
@@ -308,7 +280,7 @@ export default function OrdersPage() {
     const baseKey = key.split('_')[0] || key;
     const prod = catalog.find(p => p._id === baseKey);
     return {
-      key: baseKey,
+      key,
       productId: baseKey,
       product: prod,
       name: prod?.name || 'Item',
@@ -319,14 +291,7 @@ export default function OrdersPage() {
   }, [catalog]);
 
   const normalizedCartList = useMemo(() => {
-    const map = new Map();
-    Object.entries(customerCart).forEach(([k, v]) => {
-      const item = getNormalizedCartItem(k, v);
-      const uniqueId = item.productId || k.split('_')[0] || k;
-      // Deduplicate strictly: one entry per unique base product ID
-      map.set(uniqueId, { ...item, key: uniqueId, productId: uniqueId });
-    });
-    return Array.from(map.values());
+    return Object.entries(customerCart).map(([k, v]) => getNormalizedCartItem(k, v));
   }, [customerCart, getNormalizedCartItem]);
 
   const totalItemCount = normalizedCartList.reduce((sum, item) => sum + item.quantity, 0);
@@ -424,7 +389,7 @@ export default function OrdersPage() {
       if (order.deliveryCharge > 0) {
         cart.addItem({
           _id: 'delivery_charges_fee',
-          name: '🚚 Delivery Charges',
+          name: 'Delivery Charges',
           sellingPrice: order.deliveryCharge,
           purchasePrice: 0,
           mrp: order.deliveryCharge,
@@ -468,24 +433,26 @@ export default function OrdersPage() {
             <button
               onClick={() => setViewMode('queue')}
               className={clsx(
-                'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer',
+                'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5',
                 viewMode === 'queue'
                   ? 'bg-white shadow-xs text-primary-700 font-extrabold'
                   : 'text-gray-600 hover:text-gray-900'
               )}
             >
-              🏪 Orders Queue ({orders.length})
+              <Package size={15} />
+              <span>Orders Queue ({orders.length})</span>
             </button>
             <button
               onClick={() => setViewMode('create')}
               className={clsx(
-                'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer',
+                'px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5',
                 viewMode === 'create'
                   ? 'bg-white shadow-xs text-primary-700 font-extrabold'
                   : 'text-gray-600 hover:text-gray-900'
               )}
             >
-              🛒 Create Order
+              <ShoppingCart size={15} />
+              <span>Create Order</span>
             </button>
           </div>
 
@@ -589,7 +556,7 @@ export default function OrdersPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   )}
                 >
-                  <span>⚡ Active Orders</span>
+                  <span className="flex items-center gap-1"><Clock size={13} /> Active Orders</span>
                   <span className={clsx(
                     'text-[11px] font-extrabold px-2 py-0.5 rounded-full',
                     queueTab === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'
@@ -607,7 +574,7 @@ export default function OrdersPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   )}
                 >
-                  <span>✅ Completed & Billed</span>
+                  <span className="flex items-center gap-1"><CheckCircle size={13} /> Completed & Billed</span>
                   <span className={clsx(
                     'text-[11px] font-extrabold px-2 py-0.5 rounded-full',
                     queueTab === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-300 text-gray-700'
@@ -637,13 +604,13 @@ export default function OrdersPage() {
                   onChange={e => setStatusFilter(e.target.value)}
                 >
                   <option value="all">All Statuses</option>
-                  <option value="pending">⏳ Pending</option>
-                  <option value="packing">📦 Packing</option>
-                  <option value="ready">🎉 Ready for Pickup</option>
-                  <option value="out_for_delivery">🚚 Out for Delivery</option>
-                  <option value="confirmed">✓ Confirmed</option>
-                  <option value="delivered">✅ Delivered</option>
-                  <option value="cancelled">✕ Cancelled</option>
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="packing">Packing</option>
+                  <option value="ready">Ready for Pickup</option>
+                  <option value="out_for_delivery">Out for Delivery</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
                 </select>
 
                 <div className="relative flex-1 md:w-64 min-w-44">
@@ -746,7 +713,7 @@ export default function OrdersPage() {
                             {ord.sentToBilling && (
                               <div className="mt-1 flex items-center gap-1">
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 shadow-2xs">
-                                  <span>🚀 POS: {ord.sentToBillingBy || ord.confirmedByName || 'Staff'}</span>
+                                  <span>POS: {ord.sentToBillingBy || ord.confirmedByName || 'Staff'}</span>
                                 </span>
                               </div>
                             )}
@@ -766,7 +733,11 @@ export default function OrdersPage() {
                                   ? 'bg-amber-50 text-amber-900 border-amber-300'
                                   : 'bg-emerald-50 text-emerald-800 border-emerald-300'
                               )}>
-                                {ord.deliveryCharge > 0 ? `🚚 ₹${ord.deliveryCharge}` : '🏪 Free Pickup'}
+                                {ord.deliveryCharge > 0 ? (
+                                  <><Truck size={12} /><span>₹{ord.deliveryCharge}</span></>
+                                ) : (
+                                  <><Store size={12} /><span>Free Pickup</span></>
+                                )}
                               </span>
                               <span className="text-[11px] text-gray-500 max-w-[130px] truncate" title={ord.deliveryAddress || 'Store Pickup'}>
                                 {ord.deliveryAddress || 'Store Pickup'}
@@ -804,13 +775,13 @@ export default function OrdersPage() {
                               value={ord.status || 'pending'}
                               onChange={e => handleUpdateStatus(ord._id, e.target.value)}
                             >
-                              <option value="pending">⏳ Pending</option>
-                              <option value="confirmed">✓ Confirmed</option>
-                              <option value="packing">📦 Packing</option>
-                              <option value="ready">🎉 Ready</option>
-                              <option value="out_for_delivery">🚚 Out for Delivery</option>
-                              <option value="delivered">✅ Delivered</option>
-                              <option value="cancelled">✕ Cancelled</option>
+                              <option value="pending">Pending</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="packing">Packing</option>
+                              <option value="ready">Ready</option>
+                              <option value="out_for_delivery">Out for Delivery</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
                             </select>
                           </td>
 
@@ -927,12 +898,16 @@ export default function OrdersPage() {
                         <span>{selectedOrderDetails.deliveryAddress || 'Store Pickup (Counter)'}</span>
                       </p>
                       <span className={clsx(
-                        'px-2.5 py-0.5 rounded-md text-xs font-bold border',
+                        'px-2.5 py-0.5 rounded-md text-xs font-bold border inline-flex items-center gap-1.5',
                         selectedOrderDetails.deliveryCharge > 0
                           ? 'bg-amber-50 text-amber-900 border-amber-300'
                           : 'bg-emerald-50 text-emerald-800 border-emerald-300'
                       )}>
-                        {selectedOrderDetails.deliveryCharge > 0 ? '🚚 Home Delivery' : '🏪 Store Pickup'}
+                        {selectedOrderDetails.deliveryCharge > 0 ? (
+                          <><Truck size={13} /><span>Home Delivery</span></>
+                        ) : (
+                          <><Store size={13} /><span>Store Pickup</span></>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -960,9 +935,9 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => setEditingDeliveryFee(false)}
-                          className="btn-secondary py-1 px-2 text-xs font-medium cursor-pointer"
+                          className="btn-secondary py-1 px-2.5 text-xs font-medium cursor-pointer"
                         >
-                          ✕
+                          Cancel
                         </button>
                       </div>
                     ) : (
@@ -1058,7 +1033,7 @@ export default function OrdersPage() {
 
                   {selectedOrderDetails.sentToBilling && (
                     <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
-                      <span>🚀 Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.confirmedByName || 'Staff'}</strong></span>
+                      <span>Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.confirmedByName || 'Staff'}</strong></span>
                     </div>
                   )}
                 </div>
@@ -1124,18 +1099,7 @@ export default function OrdersPage() {
               {/* Category Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide text-xs sm:text-sm">
                 {categories.map(cat => {
-                  const iconMap = {
-                    'all': '🛍️',
-                    'food & staples': '🍚',
-                    'beverages & dairy': '🥤',
-                    'snacks & biscuits': '🍿',
-                    'personal & household care': '🧼',
-                    'food': '🍚',
-                    'beverages': '🥤',
-                    'snacks': '🍿',
-                    'household': '🧼',
-                  };
-                  const icon = iconMap[cat.toLowerCase()] || '📦';
+                  const isActive = selectedCategory.toLowerCase() === cat.toLowerCase();
                   return (
                     <button
                       key={cat}
@@ -1144,13 +1108,13 @@ export default function OrdersPage() {
                         setSelectedSubCategory('all');
                       }}
                       className={clsx(
-                        'px-4 py-2 rounded-xl font-bold whitespace-nowrap capitalize transition-all shrink-0 flex items-center gap-1.5 cursor-pointer',
-                        selectedCategory.toLowerCase() === cat.toLowerCase()
-                          ? 'bg-primary-600 text-white shadow-xs scale-102'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        'px-4 py-2 rounded-xl font-bold whitespace-nowrap capitalize transition-all shrink-0 flex items-center gap-1.5 cursor-pointer border',
+                        isActive
+                          ? 'bg-primary-600 text-white border-primary-600 shadow-xs scale-102'
+                          : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
                       )}
                     >
-                      <span>{icon}</span>
+                      <CategoryIcon name={cat} size={14} />
                       <span>{cat === 'all' ? 'All Items' : cat}</span>
                     </button>
                   );
@@ -1181,16 +1145,12 @@ export default function OrdersPage() {
                 const inCartQty = inCartItem ? (typeof inCartItem === 'object' ? inCartItem.quantity : inCartItem) : 0;
                 const catName = getProductCategory(prod);
                 const subCatName = getProductSubcategory(prod);
-                const subIcon = SUBCATEGORY_ICONS[subCatName.toLowerCase()] || '🏷️';
 
                 return (
                   <div
                     key={prod._id}
                     onClick={() => handleOpenPackaging(prod)}
-                    className={clsx(
-                      'card p-4 flex items-center justify-between border transition-all cursor-pointer hover:shadow-md group',
-                      inCartQty > 0 ? 'border-amber-400 bg-amber-50/20 shadow-xs hover:border-amber-500' : 'hover:border-primary-400'
-                    )}
+                    className="card p-4 flex items-center justify-between border transition-all cursor-pointer hover:shadow-md group border-gray-200 hover:border-primary-400"
                   >
                     <div className="min-w-0 flex-1 pr-2">
                       <p className="font-bold text-sm text-gray-900 group-hover:text-primary-700 truncate leading-snug">{prod.name}</p>
@@ -1199,7 +1159,7 @@ export default function OrdersPage() {
                           {catName}
                         </span>
                         <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                          <span>{subIcon}</span>
+                          <CategoryIcon name={subCatName} size={11} />
                           <span>{subCatName}</span>
                         </span>
                         <span className="text-xs text-gray-400">· Stock: {prod.currentStock}</span>
@@ -1215,23 +1175,10 @@ export default function OrdersPage() {
                         e.stopPropagation();
                         handleOpenPackaging(prod);
                       }}
-                      className={clsx(
-                        'btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center',
-                        inCartQty > 0
-                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                          : 'btn-primary'
-                      )}
+                      className="btn-primary btn-sm text-xs font-bold gap-1 rounded-xl px-3 py-2 shadow-xs shrink-0 cursor-pointer transition-all flex items-center"
                     >
-                      {inCartQty > 0 ? (
-                        <>
-                          <span>✏️ In Cart: {inCartQty}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={14} />
-                          <span>Add / Packs</span>
-                        </>
-                      )}
+                      <Plus size={14} />
+                      <span>Add / Packs</span>
                     </button>
                   </div>
                 );
@@ -1321,13 +1268,14 @@ export default function OrdersPage() {
                       if (Number(adminDeliveryCharge) === 0) setAdminDeliveryCharge(30);
                     }}
                     className={clsx(
-                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer',
+                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
                       adminDeliveryMode === 'delivery'
                         ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
                         : 'text-gray-500 hover:text-gray-800'
                     )}
                   >
-                    <span>🚚 Home Delivery</span>
+                    <Truck size={14} />
+                    <span>Home Delivery</span>
                   </button>
                   <button
                     type="button"
@@ -1336,13 +1284,14 @@ export default function OrdersPage() {
                       setAdminDeliveryCharge(0);
                     }}
                     className={clsx(
-                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer',
+                      'py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
                       adminDeliveryMode === 'pickup'
                         ? 'bg-white text-emerald-800 shadow-xs border border-gray-200'
                         : 'text-gray-500 hover:text-gray-800'
                     )}
                   >
-                    <span>🏪 Store Pickup</span>
+                    <Store size={14} />
+                    <span>Store Pickup</span>
                   </button>
                 </div>
               </div>
@@ -1418,8 +1367,9 @@ export default function OrdersPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700">
-                    📍 <b>Counter Pickup:</b> Customer collects order in store.
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-700 flex items-center gap-1.5">
+                    <MapPin size={13} className="text-slate-500 shrink-0" />
+                    <span><b>Counter Pickup:</b> Customer collects order in store.</span>
                   </div>
                 )}
                 <div>

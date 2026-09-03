@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer, RotateCcw, XCircle, ShoppingBag, CheckCircle, FileText, Store } from 'lucide-react';
+import { ArrowLeft, Printer, RotateCcw, XCircle, ShoppingBag, CheckCircle, FileText, Store, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useCart } from '../../context/CartContext';
@@ -107,13 +107,13 @@ export default function SaleDetailPage() {
               onClick={() => setPrintMode('a4')}
               className={clsx('px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer', printMode === 'a4' ? 'bg-white text-primary-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900')}
             >
-              📄 A4 Invoice
+              A4 Invoice
             </button>
             <button
               onClick={() => setPrintMode('thermal')}
               className={clsx('px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer', printMode === 'thermal' ? 'bg-white text-primary-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900')}
             >
-              🧾 Thermal Slip
+              Thermal Slip
             </button>
           </div>
 
@@ -236,17 +236,17 @@ export default function SaleDetailPage() {
             )}
           </div>
 
-          {/* Celebratory Savings Banner on Thermal */}
+          {/* Savings Summary on Thermal */}
           {totalSaved > 0 && (
-            <div className="my-3 p-2 border-2 border-dashed border-emerald-600 text-center text-emerald-800 font-bold bg-emerald-50 rounded">
-              <p className="text-xs">🎉 YOU SAVED {fmt(totalSaved)} ({savingsPct}%)! 🎉</p>
+            <div className="my-3 p-2 border border-emerald-600 text-center text-emerald-800 font-bold bg-emerald-50 rounded">
+              <p className="text-xs">TOTAL SAVINGS: {fmt(totalSaved)} ({savingsPct}%)</p>
               <p className="text-[9px] font-normal text-emerald-700 mt-0.5">Thank you for saving with us</p>
             </div>
           )}
 
           <div className="text-center text-[10px] text-gray-500 pt-1 space-y-0.5">
             <p>Thank you for shopping at New Columbu Stores!</p>
-            <p>Please visit again 🙏</p>
+            <p>Please visit again</p>
           </div>
         </div>
       ) : (
@@ -357,11 +357,13 @@ export default function SaleDetailPage() {
             </table>
           </div>
 
-          {/* Celebratory Savings Banner on A4 */}
+          {/* Customer Savings Summary on A4 */}
           {totalSaved > 0 && (
-            <div className="mb-6 p-4 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-emerald-950 flex items-center justify-between shadow-xs">
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-950 flex items-center justify-between shadow-xs">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">🎉</span>
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <Tag size={20} />
+                </div>
                 <div>
                   <p className="font-extrabold text-sm uppercase tracking-wider text-emerald-800">Total Customer Savings</p>
                   <p className="text-xs text-emerald-700 mt-0.5">

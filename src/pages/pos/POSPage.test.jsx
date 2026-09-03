@@ -37,6 +37,16 @@ describe('POSPage Component & Buttons', () => {
       category: { name: 'beverages' },
       unit: { symbol: 'L' },
     },
+    {
+      _id: 'p_water',
+      name: 'Bisleri Water 1L',
+      sellingPrice: 20,
+      currentStock: 100,
+      gstRate: 18,
+      barcode: '8901234567892',
+      category: { name: 'beverages' },
+      unit: { symbol: 'L' },
+    },
   ];
 
   beforeEach(() => {
@@ -86,8 +96,8 @@ describe('POSPage Component & Buttons', () => {
     // Complete bill button is present (item in cart)
     expect(screen.getByRole('button', { name: /COMPLETE BILL/i })).toBeInTheDocument();
 
-    // Product is shown in bill and marked in catalog with In Cart badge
-    expect(screen.getByText(/In Cart: 1/i)).toBeInTheDocument();
+    // Product is shown in bill cart basket
+    expect(screen.getByText(/1 item in basket/i)).toBeInTheDocument();
 
     // Stable catalog still displays other products without disappearing
     expect(screen.getByText('Sunflower Oil 1L')).toBeInTheDocument();
@@ -292,7 +302,7 @@ describe('POSPage Component & Buttons', () => {
       fireEvent.click(screen.getByRole('button', { name: /Add to Bill/i }));
     });
 
-    expect(screen.getByText(/In Cart: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 item in basket/i)).toBeInTheDocument();
 
     // 2. Click Select Customer button
     await act(async () => {
@@ -403,5 +413,79 @@ describe('POSPage Component & Buttons', () => {
     // Both items exist in cart
     expect(screen.getAllByText(/Toor Dal 1kg/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Sunflower Oil 1L').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('allows adding multiple distinct subcategories/pack sizes of the same product (e.g. 1L and 2L water bottles) as separate items and accumulates quantity for same subcategory', async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <CartProvider>
+              <POSPage />
+            </CartProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    // 1. Click on Bisleri Water 1L
+    const waterCard = screen.getAllByText('Bisleri Water 1L')[0];
+    await act(async () => {
+      fireEvent.click(waterCard);
+    });
+
+    // Select 1L option (default) and change quantity to 5
+    const qtyInput = screen.getByDisplayValue('1');
+    await act(async () => {
+      fireEvent.change(qtyInput, { target: { value: '5' } });
+      fireEvent.click(screen.getByRole('button', { name: /Add to Bill/i }));
+    });
+
+    // 1 item in basket: Bisleri Water 1L (1 Liter)
+    expect(screen.getByText(/1 item in basket/i)).toBeInTheDocument();
+    expect(screen.getByText('Bisleri Water 1L (1 Liter)')).toBeInTheDocument();
+
+    // 2. Click on Bisleri Water 1L again to add a DIFFERENT subcategory: 2L with quantity 4
+    await act(async () => {
+      fireEvent.click(waterCard);
+    });
+
+    // Select 2L option button
+    const twoLiterBtn = screen.getByText('2 Liter');
+    await act(async () => {
+      fireEvent.click(twoLiterBtn);
+    });
+
+    const qtyInput2 = screen.getByDisplayValue('1');
+    await act(async () => {
+      fireEvent.change(qtyInput2, { target: { value: '4' } });
+      fireEvent.click(screen.getByRole('button', { name: /Add to Bill/i }));
+    });
+
+    // Both variants MUST exist as distinct items in the cart!
+    expect(screen.getByText(/2 items in basket/i)).toBeInTheDocument();
+    expect(screen.getByText('Bisleri Water 1L (1 Liter)')).toBeInTheDocument();
+    expect(screen.getByText('Bisleri Water 1L (2 Liter)')).toBeInTheDocument();
+
+    // 3. Add 1L again with quantity 2 (SAME subcategory)
+    await act(async () => {
+      fireEvent.click(waterCard);
+    });
+
+    const oneLiterBtn = screen.getByText('1 Liter');
+    await act(async () => {
+      fireEvent.click(oneLiterBtn);
+    });
+
+    const qtyInput3 = screen.getByDisplayValue('1');
+    await act(async () => {
+      fireEvent.change(qtyInput3, { target: { value: '2' } });
+      fireEvent.click(screen.getByRole('button', { name: /Add to Bill/i }));
+    });
+
+    // Still 2 items in basket, but 1L quantity is now 5 + 2 = 7
+    expect(screen.getByText(/2 items in basket/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('7')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('4')).toBeInTheDocument();
   });
 });

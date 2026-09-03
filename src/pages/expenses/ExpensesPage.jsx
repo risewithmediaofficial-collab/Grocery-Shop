@@ -9,14 +9,14 @@ import clsx from 'clsx';
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 const CATEGORIES = [
-  { value: 'rent', label: '🏠 Shop Rent' },
-  { value: 'electricity', label: '⚡ Electricity / Power' },
-  { value: 'salary', label: '👥 Staff Salary' },
-  { value: 'transport', label: '🚚 Transport & Freight' },
-  { value: 'packaging', label: '📦 Bags & Packaging' },
-  { value: 'maintenance', label: '🛠️ Repairs & Maintenance' },
-  { value: 'internet', label: '🌐 Internet & Utilities' },
-  { value: 'other', label: '📋 Miscellaneous / Other' },
+  { value: 'rent', label: 'Shop Rent' },
+  { value: 'electricity', label: 'Electricity / Power' },
+  { value: 'salary', label: 'Staff Salary' },
+  { value: 'transport', label: 'Transport & Freight' },
+  { value: 'packaging', label: 'Bags & Packaging' },
+  { value: 'maintenance', label: 'Repairs & Maintenance' },
+  { value: 'internet', label: 'Internet & Utilities' },
+  { value: 'other', label: 'Miscellaneous / Other' },
 ];
 
 function ExpenseModal({ onSave, onClose }) {
@@ -88,13 +88,13 @@ function ExpenseModal({ onSave, onClose }) {
               />
             </div>
             <div>
-              <label className="form-label font-bold text-xs">Payment Method</label>
-              <select className="form-select text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                <option value="cash">💵 Cash</option>
-                <option value="upi">📱 UPI / QR Code</option>
-                <option value="card">💳 Card</option>
-                <option value="bank_transfer">🏦 Bank Transfer</option>
-              </select>
+                <label className="form-label font-bold text-xs">Payment Method</label>
+                <select className="form-select text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI / QR Code</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
             </div>
             <div>
               <label className="form-label text-xs">Description / Remarks</label>

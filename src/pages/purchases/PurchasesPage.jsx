@@ -82,7 +82,7 @@ function PurchaseFormModal({ suppliers, products, onSave, onClose }) {
             <h2 className="font-bold text-lg text-gray-900">Receive New Purchase Goods</h2>
             <p className="text-xs text-gray-500">Increases inventory stock & creates batch records automatically</p>
           </div>
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -235,7 +235,7 @@ function PurchaseFormModal({ suppliers, products, onSave, onClose }) {
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
             <button type="submit" disabled={loading} className="btn-primary flex-1 py-2.5 font-bold">
-              {loading ? 'Receiving...' : '✓ Confirm Purchase & Update Stock'}
+              {loading ? 'Receiving...' : 'Confirm Purchase & Update Stock'}
             </button>
           </div>
         </form>

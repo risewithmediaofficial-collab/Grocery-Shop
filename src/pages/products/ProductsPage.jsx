@@ -9,18 +9,11 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
+import CategoryIcon from '../../components/common/CategoryIcon';
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 const GST_RATES = [0, 5, 12, 18, 28];
-
-const CATEGORY_ICONS = {
-  'food': '🍚',
-  'beverages': '🥤',
-  'snacks': '🍿',
-  'household': '🧼',
-  'personal care': '🧴',
-};
 
 const CATEGORY_BADGES = {
   'food': 'bg-emerald-100 text-emerald-800 border-emerald-200',
@@ -162,14 +155,11 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
                   }}
                 >
                   <option value="">-- Choose Category --</option>
-                  {categories.map(c => {
-                    const icon = CATEGORY_ICONS[c.name.toLowerCase()] || '📦';
-                    return (
-                      <option key={c._id} value={c._id}>
-                        {icon} {c.name}
-                      </option>
-                    );
-                  })}
+                  {categories.map(c => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -237,7 +227,7 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
           <div className="pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider flex items-center gap-1.5">
-                <span>💰 2. MRP & Selling Price Options</span>
+                <Tag size={13} /> 2. MRP & Selling Price Options
               </h3>
               <div className="flex items-center gap-2 flex-wrap">
                 {profitMargin && (
@@ -305,18 +295,20 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
               <div className="mt-2.5 p-2.5 rounded-xl border text-xs flex items-center justify-between">
                 {discountInfo.type === 'discount' && (
                   <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 border-emerald-200 w-full p-2 rounded-lg font-semibold">
-                    <span className="text-base">🎉</span>
+                    <Tag size={14} className="text-emerald-600 shrink-0" />
                     <span>Customer Discount: <strong>₹{discountInfo.discountAmt}</strong> per unit ({discountInfo.discountPct}% OFF MRP)</span>
                   </div>
                 )}
                 {discountInfo.type === 'equal' && (
-                  <div className="text-gray-600 bg-gray-50 border-gray-200 w-full p-2 rounded-lg font-medium">
-                    <span>🏷️ Selling at standard MRP (₹{form.mrp}) · 0% discount</span>
+                  <div className="text-gray-600 bg-gray-50 border-gray-200 w-full p-2 rounded-lg font-medium flex items-center gap-1.5">
+                    <Tag size={13} className="text-gray-400 shrink-0" />
+                    <span>Selling at standard MRP (₹{form.mrp}) · 0% discount</span>
                   </div>
                 )}
                 {discountInfo.type === 'warning' && (
-                  <div className="text-amber-800 bg-amber-50 border-amber-200 w-full p-2 rounded-lg font-medium">
-                    <span>⚠️ Selling price exceeds MRP by ₹{discountInfo.diff}</span>
+                  <div className="text-amber-800 bg-amber-50 border-amber-200 w-full p-2 rounded-lg font-medium flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                    <span>Selling price exceeds MRP by ₹{discountInfo.diff}</span>
                   </div>
                 )}
               </div>
@@ -326,7 +318,7 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
           {/* Section 3: GST & Tax */}
           <div className="pt-3 border-t border-gray-100">
             <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider mb-3">
-              🏛️ 3. GST & Tax Rates
+              3. GST & Tax Rates
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -352,7 +344,7 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
           {/* Section 4: Stock & Low Stock Alert */}
           <div className="pt-3 border-t border-gray-100">
             <h3 className="text-xs font-bold text-primary-800 uppercase tracking-wider mb-3">
-              📦 4. Stock & Low Stock Alert
+              4. Stock & Low Stock Alert
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -446,14 +438,14 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
                     value={reductionReason}
                     onChange={e => setReductionReason(e.target.value)}
                   >
-                    <option value="Mistakenly Added / Entry Error">📝 Mistakenly Added / Entry Error (e.g. wrong inward count)</option>
-                    <option value="Damaged / Broken in Store">🗑️ Damaged / Broken / Leaked in store</option>
-                    <option value="Expired / Spoiled Stock">⏳ Expired / Spoiled / Rotten</option>
-                    <option value="Lost / Suspected Theft (Shrinkage)">🔍 Lost / Suspected Theft (Shrinkage)</option>
-                    <option value="Returned to Supplier">↩️ Returned to Supplier / Vendor</option>
-                    <option value="Internal Store Consumption">🏢 Internal Store Consumption / Sampling</option>
-                    <option value="Physical Count Discrepancy">⚖️ Physical Count Discrepancy</option>
-                    <option value="Other Reason">✏️ Other Reason</option>
+                    <option value="Mistakenly Added / Entry Error">Mistakenly Added / Entry Error (e.g. wrong inward count)</option>
+                    <option value="Damaged / Broken in Store">Damaged / Broken / Leaked in store</option>
+                    <option value="Expired / Spoiled Stock">Expired / Spoiled / Rotten</option>
+                    <option value="Lost / Suspected Theft (Shrinkage)">Lost / Suspected Theft (Shrinkage)</option>
+                    <option value="Returned to Supplier">Returned to Supplier / Vendor</option>
+                    <option value="Internal Store Consumption">Internal Store Consumption / Sampling</option>
+                    <option value="Physical Count Discrepancy">Physical Count Discrepancy</option>
+                    <option value="Other Reason">Other Reason</option>
                   </select>
                 </div>
 
@@ -580,11 +572,10 @@ export default function ProductsPage() {
     });
 
     return [
-      { id: 'all', name: 'All Items', icon: '🛍️' },
+      { id: 'all', name: 'All Items' },
       ...sortedCats.map(c => ({
         id: c._id,
         name: c.name,
-        icon: CATEGORY_ICONS[c.name.toLowerCase()] || '📦',
       }))
     ];
   }, [categories]);
@@ -623,7 +614,7 @@ export default function ProductsPage() {
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
               )}
             >
-              <span>{tab.icon}</span>
+              <CategoryIcon name={tab.name} size={14} className="shrink-0" />
               <span>{tab.name}</span>
             </button>
           );
@@ -681,7 +672,6 @@ export default function ProductsPage() {
               ) : products.map(p => {
                 const catSlug = (p.category?.name || '').toLowerCase();
                 const badgeStyle = CATEGORY_BADGES[catSlug] || 'bg-gray-100 text-gray-800 border-gray-200';
-                const catIcon = CATEGORY_ICONS[catSlug] || '📦';
 
                 return (
                   <tr key={p._id}>
@@ -692,8 +682,8 @@ export default function ProductsPage() {
                       </div>
                     </td>
                     <td>
-                      <span className={clsx('badge text-[11px] font-bold border gap-1', badgeStyle)}>
-                        <span>{catIcon}</span>
+                      <span className={clsx('badge text-[11px] font-bold border gap-1 inline-flex items-center', badgeStyle)}>
+                        <CategoryIcon name={p.category?.name} size={12} className="shrink-0" />
                         <span>{p.category?.name || 'Uncategorized'}</span>
                       </span>
                     </td>

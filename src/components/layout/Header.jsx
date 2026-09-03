@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell, LogOut, User, ChevronDown, Settings, X, ArrowRight,
   CheckCheck, Package, AlertTriangle, ShieldAlert, Clock, Info,
-  CheckCircle, Trash2, ExternalLink, Menu, Store
+  CheckCircle, Trash2, ExternalLink, Menu, Store, ShoppingCart
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -155,7 +155,7 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
               {
                 duration: 6000,
                 position: 'top-right',
-                icon: item.type === 'new_order' ? '🛒' : '🔔',
+                icon: item.type === 'new_order' ? <ShoppingCart size={18} className="text-primary-600" /> : <Bell size={18} className="text-amber-500" />,
                 style: {
                   background: '#ffffff',
                   color: '#111827',

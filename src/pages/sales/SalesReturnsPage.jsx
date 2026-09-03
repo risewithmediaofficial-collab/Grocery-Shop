@@ -185,10 +185,10 @@ export default function SalesReturnsPage() {
               <div>
                 <label className="form-label">Refund Method</label>
                 <select className="form-select" value={refundMethod} onChange={e => setRefundMethod(e.target.value)}>
-                  <option value="cash">💵 Cash Refund</option>
-                  <option value="upi">📱 UPI Transfer</option>
-                  <option value="credit">📋 Customer Credit Balance</option>
-                  <option value="bank_transfer">🏦 Bank Transfer</option>
+                  <option value="cash">Cash Refund</option>
+                  <option value="upi">UPI Transfer</option>
+                  <option value="credit">Customer Credit Balance</option>
+                  <option value="bank_transfer">Bank Transfer</option>
                 </select>
               </div>
               <div>

@@ -67,7 +67,7 @@ export default function AuditLogPage() {
             )}
           >
             <AlertTriangle size={13} />
-            ⚠️ Unbilled Stock Reductions
+            Unbilled Stock Reductions
           </button>
         </div>
 
@@ -156,7 +156,7 @@ export default function AuditLogPage() {
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-gray-600 font-medium">Stock Change:</span>
                               <span className="font-bold text-red-700">
-                                {l.oldValue?.stock ?? '?'} ➔ {l.newValue.stock ?? '?'} (-{l.newValue.reducedBy ?? '?'} units)
+                                {l.oldValue?.stock ?? '?'} → {l.newValue.stock ?? '?'} (-{l.newValue.reducedBy ?? '?'} units)
                               </span>
                             </div>
                             <div className="flex items-start justify-between gap-2 pt-1 border-t border-gray-100">

@@ -1,17 +1,17 @@
 const mongoose = require('mongoose');
 
-// A snapshot of a single line item in a sale — GST locked at time of sale
+// Each line item stores a frozen record of product and GST data at the time of sale
 const saleItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-  productId: { type: String },           // snapshot
-  productName: { type: String },         // snapshot
-  sku: { type: String },                 // snapshot
-  barcode: { type: String },             // snapshot
-  hsnCode: { type: String },             // GST snapshot
-  gstRate: { type: Number },             // GST snapshot
+  productId: { type: String },           // product ref (frozen at sale)
+  productName: { type: String },         // product ref (frozen at sale)
+  sku: { type: String },                 // product ref (frozen at sale)
+  barcode: { type: String },             // product ref (frozen at sale)
+  hsnCode: { type: String },             // GST classification (frozen at sale)
+  gstRate: { type: Number },             // GST rate (frozen at sale)
   quantity: { type: Number, required: true },
   unit: { type: String },
-  purchasePrice: { type: Number },       // cost at time of sale (for profit calc)
+  purchasePrice: { type: Number },       // cost price at time of sale
   sellingPrice: { type: Number },        // selling price at time of sale
   mrp: { type: Number },
   discount: { type: Number, default: 0 },
@@ -30,9 +30,9 @@ const saleSchema = new mongoose.Schema({
   invoiceNumber: { type: String, unique: true },
   saleDate: { type: Date, default: Date.now },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-  customerId: { type: String },          // snapshot
-  customerName: { type: String },        // snapshot
-  customerMobile: { type: String },      // snapshot
+  customerId: { type: String },          // customer ref (frozen at sale)
+  customerName: { type: String },        // customer ref (frozen at sale)
+  customerMobile: { type: String },      // customer ref (frozen at sale)
 
   items: [saleItemSchema],
 

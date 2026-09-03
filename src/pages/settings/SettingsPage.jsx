@@ -188,7 +188,7 @@ export default function SettingsPage() {
               : 'bg-green-50 text-green-800 border border-green-200 hover:bg-green-100'
           )}
         >
-          <MessageCircle size={15} /> WhatsApp Automation ⚡
+          <MessageCircle size={15} /> WhatsApp Automation
         </button>
 
         <button
@@ -415,7 +415,7 @@ export default function SettingsPage() {
                 disabled={savingWhatsApp}
                 className="btn bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold w-full py-3 shadow-md cursor-pointer text-xs"
               >
-                {savingWhatsApp ? 'Saving Automation Settings...' : 'Save WhatsApp Automation Rules ✓'}
+                {savingWhatsApp ? 'Saving Automation Settings...' : 'Save WhatsApp Automation Rules'}
               </button>
             </form>
           </div>
@@ -463,7 +463,7 @@ export default function SettingsPage() {
                   className="btn bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold w-full py-2.5 shadow-xs cursor-pointer text-xs gap-1.5"
                 >
                   <Send size={13} />
-                  <span>{sendingTest ? 'Dispatching...' : 'Dispatch Test WhatsApp ⚡'}</span>
+                  <span>{sendingTest ? 'Dispatching...' : 'Dispatch Test WhatsApp'}</span>
                 </button>
               </form>
             </div>
@@ -500,8 +500,9 @@ export default function SettingsPage() {
                           <span className="font-bold text-gray-900">{log.customerName}</span>
                           <span className="text-[11px] text-gray-500 font-mono">+91 {log.recipientMobile}</span>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-800 uppercase">
-                          ✓ {log.status}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-800 uppercase inline-flex items-center gap-1">
+                          <Check size={11} />
+                          <span>{log.status}</span>
                         </span>
                       </div>
 

@@ -6,9 +6,9 @@ import api from '../../services/api';
 import clsx from 'clsx';
 
 const ROLES = [
-  { value: 'admin', label: '👑 Admin / Store Owner', desc: 'Full unrestricted access to all modules, financial reports, user management, settings, & inventory' },
-  { value: 'manager', label: '👔 Store Manager', desc: 'Can manage sales, purchases, inventory, suppliers, & view reports' },
-  { value: 'cashier', label: '💻 Cashier & Store Staff', desc: 'POS Billing, customer lookups, receipts, purchase inward, product catalog, & stock management' },
+  { value: 'admin', label: 'Admin / Store Owner', desc: 'Full unrestricted access to all modules, financial reports, user management, settings, & inventory' },
+  { value: 'manager', label: 'Store Manager', desc: 'Can manage sales, purchases, inventory, suppliers, & view reports' },
+  { value: 'cashier', label: 'Cashier & Store Staff', desc: 'POS Billing, customer lookups, receipts, purchase inward, product catalog, & stock management' },
 ];
 
 function UserModal({ user, onSave, onClose }) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart3, TrendingUp, DollarSign, Package, Calendar, Download, Printer, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { BarChart3, TrendingUp, DollarSign, Package, Calendar, Download, Printer, ArrowDownRight, ArrowUpRight, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import clsx from 'clsx';
@@ -23,7 +23,7 @@ export default function ReportsPage() {
       if (dateTo) params.set('dateTo', dateTo);
 
       if (activeTab === 'profit') {
-        const res = await api.get(`/reports/profit?${params}`);
+        const res = await api.get(`/reports/profit-loss?${params}`);
         setProfitData(res.data.data);
       } else if (activeTab === 'sales') {
         const res = await api.get(`/reports/sales?${params}`);
@@ -42,32 +42,37 @@ export default function ReportsPage() {
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
   return (
-    <div className="page-container">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="page-container space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title">Reports & Financial Analytics</h1>
-          <p className="page-subtitle">Real-time profit calculations, GST summaries, and inventory valuation</p>
+          <p className="page-subtitle">Track profitability, sales tax, and stock valuation</p>
         </div>
       </div>
 
       {/* Report Type Tabs */}
       <div className="border-b border-gray-200 flex gap-6">
         {[
-          { key: 'profit', label: '📊 Profit & Loss' },
-          { key: 'sales', label: '🛒 Sales & GST Report' },
-          { key: 'inventory', label: '📦 Inventory Valuation' },
-        ].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className={clsx(
-              'pb-3 text-sm font-bold border-b-2 transition-all',
-              activeTab === t.key ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+          { key: 'profit', label: 'Profit & Loss', Icon: BarChart3 },
+          { key: 'sales', label: 'Sales & GST Report', Icon: ShoppingCart },
+          { key: 'inventory', label: 'Inventory Valuation', Icon: Package },
+        ].map(t => {
+          const TabIcon = t.Icon;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={clsx(
+                'pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-1.5',
+                activeTab === t.key ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <TabIcon size={15} />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Date Filter (for date-based reports) */}

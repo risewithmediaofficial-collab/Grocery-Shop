@@ -195,33 +195,33 @@ export function getProductSubcategory(product) {
 }
 
 /**
- * Emoji icons corresponding to subcategories
+ * Semantic icon identifiers corresponding to subcategories
  */
 export const SUBCATEGORY_ICONS = {
-  'all': '✨',
-  'rice & grains': '🌾',
-  'dal & pulses': '🥣',
-  'flour & atta': '🌾',
-  'cooking oil & ghee': '🛢️',
-  'sugar & salt': '🍬',
-  'spices & masala': '🌿',
-  'packaged water': '💧',
-  'tea & coffee': '☕',
-  'cold drinks & juices': '🥤',
-  'dairy & milk': '🥛',
-  'biscuits & cookies': '🍪',
-  'chips & namkeen': '🍿',
-  'noodles & instant food': '🍜',
-  'chocolates & sweets': '🍫',
-  'soaps & body wash': '🧼',
-  'detergents & fabric care': '🧺',
-  'oral care': '🪥',
-  'dishwash & cleaners': '🧽',
-  'food essentials': '🍚',
-  'packaged snacks': '🍿',
-  'packaged beverages': '🥤',
-  'household essentials': '🧼',
-  'general grocery': '🛒',
+  'all': 'layers',
+  'rice & grains': 'wheat',
+  'dal & pulses': 'wheat',
+  'flour & atta': 'wheat',
+  'cooking oil & ghee': 'droplets',
+  'sugar & salt': 'sparkles',
+  'spices & masala': 'flame',
+  'packaged water': 'droplets',
+  'tea & coffee': 'coffee',
+  'cold drinks & juices': 'coffee',
+  'dairy & milk': 'package',
+  'biscuits & cookies': 'cookie',
+  'chips & namkeen': 'package',
+  'noodles & instant food': 'utensils',
+  'chocolates & sweets': 'cookie',
+  'soaps & body wash': 'sparkles',
+  'detergents & fabric care': 'package',
+  'oral care': 'sparkles',
+  'dishwash & cleaners': 'sparkles',
+  'food essentials': 'wheat',
+  'packaged snacks': 'cookie',
+  'packaged beverages': 'coffee',
+  'household essentials': 'package',
+  'general grocery': 'shopping-bag',
 };
 
 /**

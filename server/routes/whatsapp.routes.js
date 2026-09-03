@@ -73,7 +73,7 @@ router.post('/test', protect, async (req, res) => {
       to: mobile,
       customerName: customerName || 'Valued Customer',
       template: 'custom',
-      messageText: message || `👋 Hello! This is an automated test message from New Columbu Stores (Krishnagiri). WhatsApp Automation is active and running! ✨`,
+      messageText: message || `Hello! This is an automated test message from New Columbu Stores (Krishnagiri). WhatsApp Automation is active and running.`,
     });
 
     if (!result.success) {
