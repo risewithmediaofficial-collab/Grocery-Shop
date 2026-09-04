@@ -154,17 +154,16 @@ jobs:
             # 5. Create production .env if not exists
             if [ ! -f .env ]; then
               echo "📝 Creating initial production .env..."
-              cat << 'EOF' > .env
-NODE_ENV=production
-DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
-IMAGE_TAG=latest
-MONGO_ROOT_USER=admin
-MONGO_ROOT_PASSWORD=columbu_secure_mongo_password_2024
-MONGO_DB_NAME=columbu_stores
-JWT_SECRET=columbu_super_secure_jwt_secret_change_in_prod_key
-JWT_EXPIRE=7d
-FRONTEND_URL=http://${{ secrets.HOST }}:90
-EOF
+              printf "%s\n" \
+                "NODE_ENV=production" \
+                "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" \
+                "IMAGE_TAG=latest" \
+                "MONGO_ROOT_USER=admin" \
+                "MONGO_ROOT_PASSWORD=columbu_secure_mongo_password_2024" \
+                "MONGO_DB_NAME=columbu_stores" \
+                "JWT_SECRET=columbu_super_secure_jwt_secret_change_in_prod_key" \
+                "JWT_EXPIRE=7d" \
+                "FRONTEND_URL=http://${{ secrets.HOST }}:90" > .env
             fi
 
             # 6. Pull and deploy
@@ -173,6 +172,11 @@ EOF
 
             echo "==> Restarting containers..."
             $COMPOSE up -d --remove-orphans
+
+            # 7. Ensure initial store seed data (admin, products, categories)
+            echo "==> Ensuring initial database seed data..."
+            sleep 3
+            $COMPOSE exec -T backend node seed/seed.js || true
 
             echo "==> Container status:"
             $COMPOSE ps

@@ -15,9 +15,11 @@ const Order = require('../models/Order');
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/columbu_stores';
 
-async function seed() {
-  await mongoose.connect(MONGO_URI);
-  console.log('Connected to MongoDB');
+async function seed({ exitOnComplete = false } = {}) {
+  if (mongoose.connection.readyState !== 1) {
+    await mongoose.connect(MONGO_URI);
+    console.log('Connected to MongoDB');
+  }
 
   // Clear existing data
   await Promise.all([
@@ -258,7 +260,13 @@ async function seed() {
   console.log('\nLogin credentials:');
   console.log('  Admin:   admin@columbu.com / admin123');
   console.log('  Cashier: cashier@columbu.com / cashier123');
-  process.exit(0);
+  if (exitOnComplete) {
+    process.exit(0);
+  }
 }
 
-seed().catch(err => { console.error('Seed error:', err); process.exit(1); });
+if (require.main === module) {
+  seed({ exitOnComplete: true }).catch(err => { console.error('Seed error:', err); process.exit(1); });
+}
+
+module.exports = { seed, runSeed: seed };
