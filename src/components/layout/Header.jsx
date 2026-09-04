@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Bell, LogOut, User, ChevronDown, Settings, X, ArrowRight,
+  Bell, LogOut, ChevronDown, Settings, X, ArrowRight,
   CheckCheck, Package, AlertTriangle, ShieldAlert, Clock, Info,
-  CheckCircle, Trash2, ExternalLink, Menu, Store, ShoppingCart
+  CheckCircle, Menu, Store, ShoppingCart,
+  Search, Volume2, VolumeX
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import clsx from 'clsx';
+import CommandPalette from '../common/CommandPalette';
+import { isAudioEnabled, setAudioEnabled } from '../../utils/audioFeedback';
 
 export function getNotificationRoute(n) {
   if (!n) return '/dashboard';
@@ -114,14 +117,7 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
   const knownNotifIdsRef = useRef(new Set());
   const initialFetchDoneRef = useRef(false);
 
-  useEffect(() => {
-    fetchNotifications();
-    // Fast 5-second polling so neither admin nor cashier misses any incoming orders or status changes
-    const interval = setInterval(fetchNotifications, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const res = await api.get('/notifications');
       const data = res.data.data || [];
@@ -177,7 +173,14 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
       setNotifications(data);
       setUnreadCount(unread);
     } catch {}
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    fetchNotifications();
+    // Fast 5-second polling so neither admin nor cashier misses any incoming orders or status changes
+    const interval = setInterval(fetchNotifications, 5000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
   // When a notification is clicked: immediately remove from bar & navigate to actual data
   const handleNotificationClick = async (e, n) => {
@@ -231,6 +234,27 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [audioOn, setAudioOn] = useState(() => isAudioEnabled());
+
+  const handleToggleAudio = () => {
+    const next = !audioOn;
+    setAudioOn(next);
+    setAudioEnabled(next);
+    toast.success(next ? 'Audio alerts enabled' : 'Audio alerts muted', { id: 'audio-toggle', duration: 1500 });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Filter unread notifications for the dropdown bar
   const unreadNotifications = notifications.filter(n => !n.isRead);
 
@@ -246,6 +270,23 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
           <Menu size={20} />
         </button>
 
+        {/* Quick Command Palette Button */}
+        <button
+          onClick={() => setCmdOpen(true)}
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 hover:bg-slate-200/80 text-slate-500 text-xs transition-all border border-slate-200/60 cursor-pointer shadow-2xs"
+          title="Quick Navigation (Ctrl+K)"
+        >
+          <Search size={14} className="text-slate-400" />
+          <span className="font-medium">Search pages & actions...</span>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-white rounded border border-slate-200 text-slate-400">Ctrl K</kbd>
+        </button>
+
+        {/* Live Store Status Pill */}
+        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Store Open</span>
+        </div>
+
         {/* Brand Title (Mobile screen) */}
         <div className="flex items-center gap-2 md:hidden">
           <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs">
@@ -256,6 +297,14 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+        {/* Audio Alert Toggle */}
+        <button
+          onClick={handleToggleAudio}
+          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+          title={audioOn ? "Audio alerts enabled (Click to mute)" : "Audio alerts muted (Click to enable)"}
+        >
+          {audioOn ? <Volume2 size={18} className="text-emerald-600" /> : <VolumeX size={18} className="text-slate-400" />}
+        </button>
         {/* Notifications Dropdown */}
         <div ref={notifRef} className="relative">
           <button
@@ -416,6 +465,9 @@ export default function Header({ onMenuToggle, sidebarCollapsed }) {
           )}
         </div>
       </div>
+
+      {/* Global Command Palette */}
+      <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} />
     </header>
   );
 }

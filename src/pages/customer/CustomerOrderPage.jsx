@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Store, ShoppingCart, Search, Plus, Minus, CheckCircle, Package,
   Phone, MapPin, Clock, ArrowRight, Trash2, X, Sparkles, AlertCircle,
-  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck, Truck
+  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck, Truck, RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -55,6 +55,41 @@ export default function CustomerOrderPage() {
   const [myOrdersList, setMyOrdersList] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'active' | 'completed'
+  const [latestPreviousOrder, setLatestPreviousOrder] = useState(null);
+
+  // Auto-fetch customer previous order for 1-click weekly repeat
+  useEffect(() => {
+    if (customerSession?.customer?.mobile) {
+      api.get(`/customers/orders/my-orders?mobile=${customerSession.customer.mobile}&customerId=${customerSession.customer._id || ''}`)
+        .then(res => {
+          const ords = res.data.data || [];
+          setMyOrdersList(ords);
+          if (ords.length > 0) {
+            setLatestPreviousOrder(ords[0]);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [customerSession]);
+
+  const handleRepeatOrder = (order) => {
+    if (!order?.items?.length) return;
+    const newCart = {};
+    order.items.forEach(it => {
+      const pId = it.product?._id || it.product || it.productId;
+      if (pId) {
+        newCart[pId] = {
+          productId: pId,
+          name: it.productName || it.name,
+          quantity: it.quantity || 1,
+          sellingPrice: it.sellingPrice || it.price || 0,
+          unit: it.unit || 'unit'
+        };
+      }
+    });
+    setCustomerCart(newCart);
+    toast.success(`Loaded ${order.items.length} items from previous order!`);
+  };
 
   const activeOrdersCount = useMemo(() => {
     return myOrdersList.filter(o => {
@@ -125,6 +160,17 @@ export default function CustomerOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
+
+  // Lock body scroll when any modal/drawer is open
+  useEffect(() => {
+    const isAnyModalOpen = showMyOrders || showLoginModal || showMobileCart;
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [showMyOrders, showLoginModal, showMobileCart]);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -652,6 +698,34 @@ export default function CustomerOrderPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Left Column: Product Search, Category Tabs & Catalog */}
             <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+              {/* 1-Click Repeat Order Card for Returning Customers */}
+              {latestPreviousOrder && Object.keys(customerCart).length === 0 && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border border-emerald-200/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-celebrate">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <RotateCcw size={18} />
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-sm text-gray-900 flex items-center gap-1.5">
+                        <span>Reorder your weekly grocery basket?</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">1-Click</span>
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Order #{latestPreviousOrder.orderNumber} • {latestPreviousOrder.items?.length} items • ₹{latestPreviousOrder.totalAmount || latestPreviousOrder.totalEstimatedAmount}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRepeatOrder(latestPreviousOrder)}
+                    className="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                  >
+                    <span>Repeat Order</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
+              )}
+
               {/* Search & Category Filter Section */}
               <div className="card p-4 sm:p-5 space-y-4 border border-gray-200">
                 <div className="relative">
@@ -929,10 +1003,29 @@ export default function CustomerOrderPage() {
                     </button>
                   </div>
 
-                  {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && totalEstimatedAmount < FREE_DELIVERY_THRESHOLD && (
-                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
-                      <Truck size={13} className="text-emerald-700 shrink-0" />
-                      <span>Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for <b>FREE Delivery</b>!</span>
+                  {deliveryMode === 'delivery' && totalEstimatedAmount > 0 && (
+                    <div className="p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-900 shadow-2xs">
+                      {totalEstimatedAmount >= FREE_DELIVERY_THRESHOLD ? (
+                        <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+                          <Sparkles size={14} className="text-emerald-600" />
+                          <span>🎉 You unlocked FREE Delivery!</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800">
+                            <span className="flex items-center gap-1">
+                              <Truck size={12} /> Add ₹{FREE_DELIVERY_THRESHOLD - totalEstimatedAmount} more for FREE Delivery!
+                            </span>
+                            <span>{Math.round((totalEstimatedAmount / FREE_DELIVERY_THRESHOLD) * 100)}%</span>
+                          </div>
+                          <div className="w-full bg-emerald-200/70 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-600 h-full rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.round((totalEstimatedAmount / FREE_DELIVERY_THRESHOLD) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1162,119 +1255,89 @@ export default function CustomerOrderPage() {
 
       {/* Customer "My Orders" History Drawer */}
       {showMyOrders && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] my-auto flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150">
-            {/* Modern Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white p-5 sm:p-6 border-b border-slate-800 relative overflow-hidden shrink-0">
-              {/* Subtle ambient light */}
-              <div className="absolute top-0 right-1/4 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-              <div className="flex items-start sm:items-center justify-between gap-3 relative z-10">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-inner shrink-0">
-                    <Truck size={22} className="text-emerald-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-extrabold text-lg sm:text-xl text-white tracking-tight">
-                        Your Order History
-                      </h3>
-                      {myOrdersList.length > 0 && (
-                        <span className="bg-emerald-500/20 text-emerald-300 text-xs font-extrabold px-3 py-0.5 rounded-full border border-emerald-500/40 inline-flex items-center gap-1.5 shadow-2xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          {myOrdersList.length} {myOrdersList.length === 1 ? 'order' : 'orders'}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-300 mt-1 flex items-center gap-2 truncate">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200 bg-slate-800/90 px-2 py-0.5 rounded-md border border-slate-700">
-                        <ShieldCheck size={12} className="text-emerald-400" />
-                        +91 {customerSession?.customer?.mobile || '6380140927'}
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-lg w-full max-h-[92vh] sm:max-h-[88vh] my-auto flex flex-col shadow-2xl overflow-hidden border border-slate-200/60 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+            {/* Clean Header */}
+            <div className="bg-white border-b border-slate-100 px-5 py-4 shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="font-bold text-base text-slate-900 tracking-tight">My Orders</h3>
+                    {myOrdersList.length > 0 && (
+                      <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {myOrdersList.length}
                       </span>
-                      <span className="text-slate-400 text-[11px] hidden sm:inline">• Live delivery tracking</span>
-                    </p>
+                    )}
+                    {activeOrdersCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                        {activeOrdersCount} live
+                      </span>
+                    )}
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    +91 {customerSession?.customer?.mobile || '6380140927'}
+                  </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setShowMyOrders(false)}
-                  className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-slate-700/80 shrink-0"
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shrink-0"
                   title="Close"
                 >
-                  <X size={18} />
+                  <X size={16} />
                 </button>
               </div>
 
-              {/* Quick Navigation Filter Pills */}
+              {/* Filter tabs */}
               {myOrdersList.length > 0 && (
-                <div className="flex items-center gap-2 pt-4 mt-2 border-t border-slate-800/80 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setOrderFilter('all')}
-                    className={clsx(
-                      'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
-                      orderFilter === 'all'
-                        ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
-                        : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-700/60'
-                    )}
-                  >
-                    All Orders ({myOrdersList.length})
-                  </button>
-
-                  {activeOrdersCount > 0 && (
+                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100">
+                  {[
+                    { key: 'all', label: `All (${myOrdersList.length})` },
+                    ...(activeOrdersCount > 0   ? [{ key: 'active',    label: `Live (${activeOrdersCount})` }]   : []),
+                    ...(completedOrdersCount > 0 ? [{ key: 'completed', label: `Delivered (${completedOrdersCount})` }] : []),
+                  ].map(tab => (
                     <button
+                      key={tab.key}
                       type="button"
-                      onClick={() => setOrderFilter('active')}
+                      onClick={() => setOrderFilter(tab.key)}
                       className={clsx(
-                        'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
-                        orderFilter === 'active'
-                          ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
-                          : 'bg-slate-800/90 text-emerald-300 hover:bg-slate-800 hover:text-emerald-200 border border-emerald-500/30'
+                        'px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer',
+                        orderFilter === tab.key
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
                       )}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      Live Tracking ({activeOrdersCount})
+                      {tab.label}
                     </button>
-                  )}
-
-                  {completedOrdersCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setOrderFilter('completed')}
-                      className={clsx(
-                        'px-3 py-1 rounded-lg font-bold transition-all cursor-pointer text-xs flex items-center gap-1.5',
-                        orderFilter === 'completed'
-                          ? 'bg-emerald-500 text-slate-950 shadow-xs font-extrabold'
-                          : 'bg-slate-800/90 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700/60'
-                      )}
-                    >
-                      Delivered ({completedOrdersCount})
-                    </button>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Orders List Container */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50/60">
+            {/* Orders List */}
+            <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-slate-50">
               {loadingOrders ? (
-                <div className="py-16 text-center text-xs text-gray-400">Loading your orders...</div>
+                <div className="py-16 text-center">
+                  <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-slate-400">Loading orders...</p>
+                </div>
               ) : myOrdersList.length === 0 ? (
-                <div className="py-16 text-center text-gray-400 bg-white rounded-2xl border border-gray-200 p-8">
-                  <Package size={42} className="mx-auto mb-3 opacity-30 text-gray-400" />
-                  <p className="font-bold text-base text-gray-700">No past orders found</p>
-                  <p className="text-xs text-gray-400 mt-1">Place an order to see your live grocery delivery tracking here.</p>
+                <div className="py-14 text-center">
+                  <Package size={36} className="mx-auto mb-3 text-slate-300" />
+                  <p className="font-semibold text-sm text-slate-700">No orders yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Your delivery history will appear here.</p>
                 </div>
               ) : filteredOrdersList.length === 0 ? (
-                <div className="py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-200 p-6 space-y-3">
-                  <p className="font-bold text-sm text-gray-700">No orders match this filter.</p>
+                <div className="py-12 text-center space-y-3">
+                  <p className="text-sm text-slate-500">No orders match this filter.</p>
                   <button
                     type="button"
                     onClick={() => setOrderFilter('all')}
-                    className="btn btn-secondary text-xs px-3 py-1.5"
+                    className="text-xs font-semibold text-slate-700 underline cursor-pointer"
                   >
-                    View All Orders
+                    View all orders
                   </button>
                 </div>
               ) : (
@@ -1284,133 +1347,94 @@ export default function CustomerOrderPage() {
                   return (
                     <div
                       key={ord._id}
-                      className="bg-white rounded-2xl border border-slate-200 hover:border-slate-300 transition-all shadow-xs hover:shadow-sm overflow-hidden space-y-3.5 p-4 sm:p-5"
+                      className="bg-white rounded-xl border border-slate-200 overflow-hidden transition-shadow hover:shadow-sm"
                     >
-                      {/* Order Card Header: Order Number, Date, Status, Total */}
-                      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-mono font-bold text-xs shadow-2xs">
-                            <Package size={15} />
+                      {/* Card Header */}
+                      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-sm text-slate-900">{ord.orderNumber}</span>
+                            <span className={clsx(
+                              'text-[10px] font-semibold px-2 py-0.5 rounded border',
+                              ord.status === 'delivered'        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              ord.status === 'out_for_delivery' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              ord.status === 'packing' || ord.status === 'ready' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                              'bg-slate-100 text-slate-500 border-slate-200'
+                            )}>
+                              {ord.status === 'out_for_delivery' ? 'Out for delivery' :
+                               ord.status === 'delivered' ? 'Delivered' :
+                               ord.status === 'packing' ? 'Packing' :
+                               ord.status === 'ready' ? 'Ready' : 'Confirmed'}
+                            </span>
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-extrabold text-slate-900 text-sm tracking-tight">
-                                {ord.orderNumber}
-                              </span>
-                              <span className="text-[10px] font-semibold text-slate-400">
-                                • {new Date(ord.createdAt).toLocaleDateString('en-IN', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {(ord.items || []).length} items • {totalUnits} units
-                            </p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {new Date(ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {' '}·{' '}
+                            {new Date(ord.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {' '}·{' '}
+                            {(ord.items || []).length} item{(ord.items || []).length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        {ord.grandTotal > 0 && (
+                          <div className="text-right shrink-0">
+                            <p className="text-[10px] text-slate-400 font-medium">Total</p>
+                            <p className="text-sm font-bold text-slate-900">₹{Number(ord.grandTotal).toLocaleString('en-IN')}</p>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {ord.grandTotal > 0 && (
-                            <div className="text-right">
-                              <span className="text-[10px] text-slate-400 block leading-none font-semibold uppercase">Total</span>
-                              <span className="text-sm font-extrabold text-slate-900">
-                                ₹{Number(ord.grandTotal).toLocaleString('en-IN')}
-                              </span>
-                            </div>
-                          )}
-                          <span className={clsx(
-                            'text-[10px] sm:text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 border shadow-2xs',
-                            ord.status === 'delivered' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                            ord.status === 'out_for_delivery' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                            ord.status === 'ready' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                            ord.status === 'packing' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                            'bg-slate-100 text-slate-800 border-slate-300'
-                          )}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                            {ord.status?.replace(/_/g, ' ') || 'Pending'}
-                          </span>
-                        </div>
+                        )}
                       </div>
 
-                      {/* Rapido-Style Live Journey Tracker */}
-                      <OrderStatusTracker order={ord} />
+                      {/* Live tracker */}
+                      <div className="px-4 pb-3">
+                        <OrderStatusTracker order={ord} />
+                      </div>
 
-                      {/* Items in this Order (Clean Receipt Flow) */}
-                      <div className="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200/70 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-extrabold uppercase tracking-wider text-slate-500 text-[10px] flex items-center gap-1.5">
-                            <Package size={12} className="text-slate-400" />
-                            Items in this Order ({(ord.items || []).length}):
-                          </span>
-                          <span className="text-[11px] font-semibold text-slate-500">
-                            {totalUnits} items
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                          {(ord.items || []).map((item, i) => (
-                            <div
-                              key={i}
-                              className="bg-white px-3 py-2 rounded-lg border border-slate-200/80 shadow-2xs flex items-center justify-between gap-2"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                                  <Package size={12} />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-slate-800 truncate" title={item.productName}>
-                                    {item.productName || 'Item'}
-                                  </p>
+                      {/* Items list */}
+                      {(ord.items || []).length > 0 && (
+                        <div className="border-t border-slate-100 px-4 py-3">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Items</p>
+                          <div className="space-y-1.5">
+                            {(ord.items || []).map((item, i) => (
+                              <div key={i} className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                  <p className="text-xs text-slate-700 font-medium truncate">{item.productName || 'Item'}</p>
                                   {item.notes && (
-                                    <p className="text-[10px] text-slate-400 truncate">{item.notes}</p>
+                                    <p className="text-[10px] text-slate-400 truncate hidden sm:block">({item.notes})</p>
                                   )}
                                 </div>
+                                <span className="text-xs text-slate-500 shrink-0 font-medium">
+                                  × {item.quantity}{item.unit ? ` ${item.unit}` : ''}
+                                </span>
                               </div>
-                              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md shrink-0 border border-slate-200">
-                                × {item.quantity} {item.unit || ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Delivery Destination & Quick Store Support */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 text-xs border-t border-slate-100">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
-                            <MapPin size={13} />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 font-semibold block uppercase tracking-wider leading-none">Destination</span>
-                            <span className="font-bold text-slate-800 text-xs truncate block">{ord.deliveryAddress || 'Store Pickup'}</span>
+                            ))}
                           </div>
                         </div>
+                      )}
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={clsx(
-                            'px-2.5 py-1 rounded-md text-[10px] font-extrabold border',
-                            ord.deliveryCharge > 0
-                              ? 'bg-amber-50 text-amber-900 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          )}>
-                            {ord.deliveryCharge > 0 ? `Delivery: ₹${ord.deliveryCharge}` : 'Free Delivery'}
+                      {/* Footer row */}
+                      <div className="border-t border-slate-100 px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <MapPin size={12} className="text-slate-400 shrink-0" />
+                          <span className="text-[11px] text-slate-500 truncate">
+                            {ord.deliveryAddress || 'Store Pickup'}
                           </span>
-
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {ord.deliveryCharge > 0 ? (
+                            <span className="text-[10px] text-slate-500 font-medium">₹{ord.deliveryCharge} delivery</span>
+                          ) : (
+                            <span className="text-[10px] text-emerald-600 font-medium">Free delivery</span>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
                               const msg = `Hello ${STORE_DETAILS.name}, I would like to check the status of my Order #${ord.orderNumber}.`;
                               openWhatsAppChat(STORE_DETAILS.cleanPhone, msg);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-2xs"
-                            title="Chat with Store on WhatsApp"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-900 hover:bg-slate-700 text-white transition-colors cursor-pointer"
                           >
                             <MessageCircle size={11} />
-                            Support
+                            Help
                           </button>
                         </div>
                       </div>

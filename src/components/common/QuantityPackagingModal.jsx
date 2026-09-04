@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { X, Plus, Minus, Check, Package, Sparkles, AlertCircle, Scale } from 'lucide-react';
+import { X, Plus, Minus, Check, Package, Scale } from 'lucide-react';
 import { getProductVariantConfig } from '../../utils/groceryVariants';
 
-export default function QuantityPackagingModal({ product, existingCartItem, onConfirm, onClose }) {
-  if (!product) return null;
-
-  const cfg = getProductVariantConfig(product);
-  const baseRate = Number(product.sellingPrice || 0);
+export default function QuantityPackagingModal({ product, onConfirm, onClose }) {
+  const cfg = product ? getProductVariantConfig(product) : { type: 'packaged_general', options: [], bagOptions: [] };
+  const baseRate = Number(product?.sellingPrice || 0);
 
   // Commodity Loose State
   const [looseMode, setLooseMode] = useState('kg'); // 'kg' or 'bag'
   const [looseKgQty, setLooseKgQty] = useState('1');
-  const [selectedBag, setSelectedBag] = useState(cfg.bagOptions?.[0]?.id || 'bag_25');
+  const [selectedBag, setSelectedBag] = useState(() => cfg.bagOptions?.[0]?.id || 'bag_25');
   const [bagCountQty, setBagCountQty] = useState('1');
 
   // Packaged Options State (Liquid, Masala, Snack, General)
-  const [selectedOptId, setSelectedOptId] = useState(cfg.selectedOption?.id || cfg.options?.[0]?.id || '');
+  const [selectedOptId, setSelectedOptId] = useState(() => cfg.selectedOption?.id || cfg.options?.[0]?.id || '');
   const [packQty, setPackQty] = useState('1');
+
+  if (!product) return null;
 
   // Current selected option object
   const currentPackOption = cfg.options?.find(o => o.id === selectedOptId) || cfg.options?.[0];

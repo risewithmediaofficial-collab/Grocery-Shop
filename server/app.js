@@ -61,9 +61,25 @@ app.use('/api/orders',          require('./routes/order.routes'));
 app.use('/api/held-bills',      require('./routes/heldBill.routes'));
 app.use('/api/whatsapp',        require('./routes/whatsapp.routes'));
 
-// Health Check
+// Health Check — used by HAProxy + Docker HEALTHCHECK
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'New Columbu Stores API is running', timestamp: new Date() });
+  const mongoose = require('mongoose');
+  const dbState = mongoose.connection.readyState; // 1 = connected
+  if (process.env.NODE_ENV !== 'test' && dbState !== 1) {
+    return res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      message: 'Database not connected',
+      db: dbState,
+    });
+  }
+  res.json({
+    success: true,
+    status: 'healthy',
+    message: 'New Columbu Stores API is running',
+    instance: process.env.INSTANCE_ID || 'unknown',
+    timestamp: new Date(),
+  });
 });
 
 // 404 Handler

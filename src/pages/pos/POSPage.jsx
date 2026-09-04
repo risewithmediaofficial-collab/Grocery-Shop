@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  Search, Barcode, X, Plus, Minus, ShoppingCart, User, Pause, Play,
-  Trash2, Printer, ChevronDown, Check, RotateCcw, Package, Sparkles,
+  Search, X, Plus, Minus, ShoppingCart, User, Pause,
+  Trash2, Check, RotateCcw, Package, Sparkles,
   Phone, AlertCircle, Banknote, CreditCard, QrCode, FileText, Split, Clock, Scale, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useCart } from '../../context/CartContext';
-import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
 import {
   getProductCategory
 } from '../../utils/groceryVariants';
+import { playScanBeep, playSuccessChime, playWarningTone } from '../../utils/audioFeedback';
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -460,10 +460,66 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           </div>
 
           {method === 'cash' && (
-            <div>
-              <label className="form-label">Cash Received</label>
-              <input className="form-input text-lg font-semibold" type="number" value={cash} onChange={e => setCash(e.target.value)} />
-              {change > 0 && <p className="text-green-600 font-semibold mt-1">Change: {fmt(change)}</p>}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="form-label mb-0">Cash Tendered</label>
+                <span className="text-[11px] text-gray-400 font-medium">1-Click Presets</span>
+              </div>
+
+              {/* Quick Cash Presets */}
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCash(String(Math.ceil(grandTotal)))}
+                  className="quick-cash-chip text-xs py-1 px-2.5 bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 font-bold"
+                >
+                  Exact ({fmt(grandTotal)})
+                </button>
+                {[100, 200, 500, 2000].map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setCash(String(val))}
+                    className={clsx(
+                      'quick-cash-chip text-xs py-1 px-2.5',
+                      cashAmt === val ? 'bg-primary-600 text-white border-primary-600' : 'bg-gray-50 text-gray-700'
+                    )}
+                  >
+                    ₹{val}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
+                <input
+                  className="form-input pl-8 text-xl font-black text-gray-900 tracking-wide rounded-xl focus:ring-2 focus:ring-primary-500"
+                  type="number"
+                  value={cash}
+                  onChange={e => setCash(e.target.value)}
+                  placeholder="0"
+                  autoFocus
+                />
+              </div>
+
+              {/* Prominent Change Return Indicator */}
+              {change > 0 && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between animate-celebrate shadow-2xs">
+                  <div className="flex items-center gap-2 text-emerald-900">
+                    <RotateCcw size={16} className="text-emerald-600" />
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Return Change to Customer</p>
+                      <p className="text-xs text-emerald-600 font-medium">Hand over cash balance</p>
+                    </div>
+                  </div>
+                  <span className="text-2xl font-black text-emerald-700">{fmt(change)}</span>
+                </div>
+              )}
+              {change < 0 && (
+                <p className="text-xs font-semibold text-rose-500 flex items-center gap-1 mt-1">
+                  <AlertCircle size={13} /> Still needs {fmt(Math.abs(change))} to complete payment
+                </p>
+              )}
             </div>
           )}
 
@@ -509,7 +565,6 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
 }
 
 export default function POSPage() {
-  const { user } = useAuth();
   const cart = useCart();
   const [searchQuery, setSearchQuery] = useState('');
   const [allCatalogProducts, setAllCatalogProducts] = useState([]);
@@ -733,6 +788,7 @@ export default function POSPage() {
   }, []);
 
   const handleSelectProduct = useCallback((product) => {
+    playScanBeep();
     const pId = product._id || product.product;
     const config = getProductVariantConfig(product);
 
@@ -833,7 +889,7 @@ export default function POSPage() {
     }
   };
 
-  const completeSale = async ({ method, cashAmt, upiAmt, paid, change, notes }) => {
+  const completeSale = async ({ method, cashAmt, upiAmt, paid, _change, notes }) => {
     try {
       const items = cart.cartItems.map(item => {
         const baseProductId = item.productId || (typeof item._id === 'string' && item._id.includes('_') ? item._id.split('_')[0] : item._id);
@@ -867,8 +923,10 @@ export default function POSPage() {
       cart.clearCart();
       setShowPayment(false);
       setShowMobileCart(false);
+      playSuccessChime();
       toast.success(`Bill completed! Invoice: ${res.data.data.invoiceNumber}`);
     } catch (err) {
+      playWarningTone();
       toast.error(err.response?.data?.message || 'Failed to complete sale');
     }
   };
@@ -912,6 +970,19 @@ export default function POSPage() {
     { key: 'household', label: 'Household Care' },
   ];
 
+  // Fast-Moving staples for 1-click zero-typing cashier billing
+  const quickStaples = useMemo(() => {
+    if (!allCatalogProducts || allCatalogProducts.length === 0) return [];
+    const stapleKeywords = ['milk', 'curd', 'bread', 'egg', 'sugar', 'salt', 'tomato', 'onion', 'potato', 'rice', 'atta', 'tea', 'biscuit', 'oil', 'dal'];
+    const matched = [];
+    for (const kw of stapleKeywords) {
+      const found = allCatalogProducts.find(p => p.name?.toLowerCase().includes(kw) && !matched.some(m => m._id === p._id));
+      if (found) matched.push(found);
+      if (matched.length >= 10) break;
+    }
+    return matched.length > 0 ? matched : allCatalogProducts.slice(0, 8);
+  }, [allCatalogProducts]);
+
   const renderBillContent = () => (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="p-2.5 sm:p-3 border-b border-gray-100 bg-gray-50/70 shrink-0">
@@ -924,7 +995,10 @@ export default function POSPage() {
               <p className="font-bold text-sm text-gray-900 truncate">{cart.customer.name}</p>
               <p className="text-xs text-gray-500 font-medium">{cart.customer.mobile}</p>
               {cart.customer.outstandingBalance > 0 && (
-                <p className="text-xs text-red-500 font-bold mt-0.5">Due: {fmt(cart.customer.outstandingBalance)}</p>
+                <div className="flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md mt-1 border border-amber-300 shadow-2xs">
+                  <AlertCircle size={11} className="text-amber-600 shrink-0" />
+                  <span>Pending Udhaar: {fmt(cart.customer.outstandingBalance)}</span>
+                </div>
               )}
             </div>
             <div className="flex flex-col gap-0.5 text-right shrink-0">
@@ -1227,6 +1301,32 @@ export default function POSPage() {
           )}
         </div>
 
+        {/* Fast-Moving Staples Quick Picks */}
+        {quickStaples.length > 0 && !searchQuery && (
+          <div className="bg-slate-50/90 p-2 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={12} className="text-amber-500" /> Fast-Moving Staples
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">1-click billing</span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {quickStaples.map(p => (
+                <button
+                  key={p._id}
+                  type="button"
+                  onClick={() => handleSelectProduct(p)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:text-emerald-800 transition-all shrink-0 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                  title={`Quick add ${p.name}`}
+                >
+                  <span className="truncate max-w-[110px]">⚡ {p.name}</span>
+                  <span className="text-emerald-600 font-bold">₹{p.sellingPrice}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           {CATEGORY_TABS.map(tab => (
             <button
@@ -1520,7 +1620,7 @@ export default function POSPage() {
                       <div className="flex items-center justify-between pt-1 text-[11px] text-gray-400">
                         <span className="inline-flex items-center gap-1">
                           <Clock size={11} className="text-gray-400 shrink-0" />
-                          <span>Held at {new Date(bill.createdAt || bill.heldAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>Held at {new Date(bill.createdAt || bill.heldAt || 0).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <button
@@ -1571,9 +1671,6 @@ export default function POSPage() {
           const lineTotal = mode === 'kg'
             ? currentKg * baseRate
             : currentBags * selectedBagOption.price;
-
-          const bagKey = `${pId}_${selectedBagOption.id}`;
-          const bagName = `${product.name} (${selectedBagOption.label})`;
 
           const handleConfirm = () => {
             if (mode === 'kg') {

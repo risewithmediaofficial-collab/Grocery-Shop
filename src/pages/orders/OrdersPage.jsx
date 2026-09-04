@@ -5,7 +5,7 @@ import {
   ShoppingCart, Package, CheckCircle, Clock, Search, Plus, Minus,
   X, ExternalLink, RefreshCw, Send, Copy, Phone, MapPin, Eye,
   Loader2, Truck, CheckCheck, FileText, ChevronRight, User, AlertCircle,
-  CheckCircle2, Layers, ShieldCheck, Store
+  CheckCircle2, Layers, ShieldCheck, Store, MessageCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import clsx from 'clsx';
 import CategoryIcon from '../../components/common/CategoryIcon';
+import { playNewOrderAlert } from '../../utils/audioFeedback';
 
 import {
   getProductCategory,
@@ -107,7 +108,20 @@ export default function OrdersPage() {
     // Auto-sync incoming orders & status updates between Admin and Cashier every 8 seconds
     const interval = setInterval(() => {
       api.get('/orders').then(res => {
-        if (res.data?.data) setOrders(res.data.data);
+        if (res.data?.data) {
+          setOrders(prev => {
+            const incoming = res.data.data;
+            if (prev.length > 0 && incoming.length > prev.length) {
+              const prevIds = new Set(prev.map(o => o._id));
+              const hasNewOrder = incoming.some(o => !prevIds.has(o._id) && (o.status === 'pending' || o.status === 'confirmed'));
+              if (hasNewOrder) {
+                playNewOrderAlert();
+                toast.success('🔔 New customer order received!', { id: 'new-incoming-order', duration: 4000 });
+              }
+            }
+            return incoming;
+          });
+        }
       }).catch(() => {});
     }, 8000);
     return () => clearInterval(interval);
@@ -329,6 +343,30 @@ export default function OrdersPage() {
     } catch {
       toast.error('Failed to update delivery fee');
     }
+  };
+
+  // 1-Click WhatsApp Status Update for Staff
+  const sendWhatsAppUpdate = (ord) => {
+    const cleanMobile = (ord.customerMobile || '').replace(/\D/g, '');
+    if (!cleanMobile) return toast.error('No mobile number for customer');
+    const targetPhone = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
+    
+    let msg = '';
+    const totalVal = ord.totalAmount || ord.totalEstimatedAmount || 0;
+    if (ord.status === 'confirmed' || ord.status === 'packing') {
+      msg = `Hello ${ord.customerName}! 🛍️ Your grocery order #${ord.orderNumber} is confirmed and currently being packed at New Columbu Stores (Total: ₹${totalVal}). We will dispatch it shortly!`;
+    } else if (ord.status === 'ready') {
+      msg = `Hello ${ord.customerName}! 📦 Your order #${ord.orderNumber} is packed and ready for pickup/dispatch at New Columbu Stores.`;
+    } else if (ord.status === 'out_for_delivery') {
+      msg = `Hello ${ord.customerName}! 🛵 Your order #${ord.orderNumber} is OUT FOR DELIVERY! Our delivery partner will arrive at your address soon.`;
+    } else if (ord.status === 'delivered') {
+      msg = `Hello ${ord.customerName}! ✅ Your order #${ord.orderNumber} has been delivered. Thank you for shopping with New Columbu Stores!`;
+    } else {
+      msg = `Hello ${ord.customerName}! ℹ️ Update regarding your order #${ord.orderNumber} at New Columbu Stores. Current status: ${ord.status?.replace(/_/g, ' ')}.`;
+    }
+
+    const url = `https://wa.me/${targetPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
   };
 
   // Submit order from Admin
@@ -788,6 +826,15 @@ export default function OrdersPage() {
                           {/* Actions: View Details + Billing POS */}
                           <td className="py-4 px-5 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => sendWhatsAppUpdate(ord)}
+                                className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
+                                title="Send 1-click WhatsApp order update to customer"
+                              >
+                                <MessageCircle size={14} />
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => setSelectedOrderDetails(ord)}

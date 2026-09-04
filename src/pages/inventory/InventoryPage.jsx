@@ -295,6 +295,21 @@ export default function InventoryPage() {
     return <span className={map[type] || 'badge-gray'}>{type.replace('_', ' ')}</span>;
   };
 
+  const handleQuickRestockDraft = () => {
+    const criticalItems = products.filter(p => (p.currentStock || 0) <= (p.reorderLevel || 5));
+    if (criticalItems.length === 0) {
+      return toast.success('All items are well stocked! No urgent restock needed.');
+    }
+    const lines = criticalItems.map(p => `• ${p.name}: Current ${p.currentStock} ${p.unit?.symbol || ''}, Reorder Threshold: ${p.reorderLevel || 5}`);
+    const summary = `*RESTOCK ORDER LIST — New Columbu Stores*\nDate: ${new Date().toLocaleDateString('en-IN')}\n\n${lines.join('\n')}\n\nTotal Items: ${criticalItems.length}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(summary);
+      toast.success(`Copied restock list (${criticalItems.length} items) to clipboard!`, { duration: 4000 });
+    } else {
+      toast.success(`Generated restock list (${criticalItems.length} items)!`);
+    }
+  };
+
   return (
     <div className="page-container max-w-7xl mx-auto space-y-5">
       {/* Header */}
@@ -303,12 +318,24 @@ export default function InventoryPage() {
           <h1 className="page-title">Stock Ledger & Inventory Management</h1>
           <p className="page-subtitle">Real-time stock ledger, audits, and category-level inventory control</p>
         </div>
-        <button
-          className="btn-primary gap-1.5 shadow-sm"
-          onClick={() => setShowAdjustModal(true)}
-        >
-          <Plus size={16} /> Adjust Stock
-        </button>
+        <div className="flex items-center gap-2">
+          {categoryStats.lowStockCount + categoryStats.outOfStockCount > 0 && (
+            <button
+              type="button"
+              onClick={handleQuickRestockDraft}
+              className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white font-bold gap-1.5 shadow-xs cursor-pointer"
+              title="Copy low-stock reorder list to clipboard"
+            >
+              <Package size={15} /> 1-Click Restock List
+            </button>
+          )}
+          <button
+            className="btn-primary gap-1.5 shadow-sm"
+            onClick={() => setShowAdjustModal(true)}
+          >
+            <Plus size={16} /> Adjust Stock
+          </button>
+        </div>
       </div>
 
       {/* Structured Category Navigation Tabs */}
@@ -354,11 +381,22 @@ export default function InventoryPage() {
           <p className="text-xl font-bold text-emerald-700 mt-1">₹{categoryStats.totalVal.toLocaleString('en-IN')}</p>
         </div>
 
-        <div className="card p-4 border-l-4 border-l-amber-500">
-          <p className="text-xs text-gray-500 font-medium">Low / Out of Stock</p>
-          <p className="text-xl font-bold text-amber-700 mt-1">
-            {categoryStats.lowStockCount + categoryStats.outOfStockCount} items
-          </p>
+        <div className="card p-4 border-l-4 border-l-amber-500 flex flex-col justify-between">
+          <div>
+            <p className="text-xs text-gray-500 font-medium">Low / Out of Stock</p>
+            <p className="text-xl font-bold text-amber-700 mt-1">
+              {categoryStats.lowStockCount + categoryStats.outOfStockCount} items
+            </p>
+          </div>
+          {categoryStats.lowStockCount + categoryStats.outOfStockCount > 0 && (
+            <button
+              type="button"
+              onClick={handleQuickRestockDraft}
+              className="mt-2 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 py-1 px-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            >
+              <Package size={12} /> <span>Copy Restock List</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -11,6 +11,7 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const { Setting } = require('../models/System');
 const { StockMovement } = require('../models/Inventory');
+const Order = require('../models/Order');
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/columbu_stores';
 
