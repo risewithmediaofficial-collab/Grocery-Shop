@@ -71,16 +71,30 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ─────────────────────────────────────────────
-  #  2. Deploy to VPS via SSH (runs only if VPS secrets exist)
+  #  2. Deploy to VPS via SSH
   # ─────────────────────────────────────────────
   deploy:
     name: 🚀 Deploy to Server
     needs: [build]
     runs-on: ubuntu-latest
-    if: ${{ secrets.HOST != '' && secrets.SSH_KEY != '' }}
 
     steps:
+      - name: Check VPS SSH Secrets
+        id: ssh_check
+        env:
+          HOST: ${{ secrets.HOST }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          if [ -n "$HOST" ] && [ -n "$SSH_KEY" ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "✅ VPS secrets detected. Proceeding with deployment."
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::HOST and SSH_KEY secrets are not configured in GitHub repository settings. Skipping VPS deployment."
+          fi
+
       - name: Deploy on VPS via SSH
+        if: steps.ssh_check.outputs.can_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
