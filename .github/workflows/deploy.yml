@@ -103,7 +103,10 @@ jobs:
               --exclude='./server/node_modules' \
               --exclude='./.git' \
               --exclude='./dist' \
-              -czf app.tar.gz .
+              --warning=no-file-changed \
+              -czf /tmp/app.tar.gz . || true
+          mv /tmp/app.tar.gz ./app.tar.gz
+          ls -lh app.tar.gz
 
       - name: Copy Deploy Bundle to VPS
         if: steps.ssh_check.outputs.can_deploy == 'true'
