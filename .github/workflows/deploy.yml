@@ -79,6 +79,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Check VPS SSH Secrets
         id: ssh_check
         env:
@@ -93,6 +96,17 @@ jobs:
             echo "::warning::HOST and SSH_KEY secrets are not configured in GitHub repository settings. Skipping VPS deployment."
           fi
 
+      - name: Copy docker-compose to VPS
+        if: steps.ssh_check.outputs.can_deploy == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.PORT || 22 }}
+          source: "docker-compose.prod.yml"
+          target: "/tmp"
+
       - name: Deploy on VPS via SSH
         if: steps.ssh_check.outputs.can_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
@@ -103,13 +117,62 @@ jobs:
           port: ${{ secrets.PORT || 22 }}
           script_stop: true
           script: |
-            cd /opt/grocery-shop || cd ~/grocery-shop
+            # 1. Setup target directory (handles root or non-root user)
+            TARGET_DIR="/opt/grocery-shop"
+            if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
+              TARGET_DIR="$HOME/grocery-shop"
+              mkdir -p "$TARGET_DIR"
+            fi
+            cd "$TARGET_DIR"
+            echo "📂 Deploy directory: $(pwd)"
 
+            # 2. Copy docker-compose from /tmp
+            if [ -f /tmp/docker-compose.prod.yml ]; then
+              cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml
+              rm -f /tmp/docker-compose.prod.yml
+            fi
+
+            # 3. Ensure Docker is installed
+            if ! command -v docker &>/dev/null; then
+              echo "📦 Installing Docker on VPS..."
+              curl -fsSL https://get.docker.com | sh
+              sudo systemctl enable --now docker 2>/dev/null || true
+              sudo usermod -aG docker "$USER" 2>/dev/null || true
+            fi
+
+            # 4. Detect compose command
+            if docker compose version &>/dev/null; then
+              COMPOSE="docker compose"
+            elif command -v docker-compose &>/dev/null; then
+              COMPOSE="docker-compose"
+            else
+              echo "📦 Installing Docker compose plugin..."
+              sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
+              COMPOSE="docker compose"
+            fi
+
+            # 5. Create production .env if not exists
+            if [ ! -f .env ]; then
+              echo "📝 Creating initial production .env..."
+              cat << 'EOF' > .env
+NODE_ENV=production
+DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+IMAGE_TAG=latest
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=columbu_secure_mongo_password_2024
+MONGO_DB_NAME=columbu_stores
+JWT_SECRET=columbu_super_secure_jwt_secret_change_in_prod_key
+JWT_EXPIRE=7d
+FRONTEND_URL=http://${{ secrets.HOST }}:90
+EOF
+            fi
+
+            # 6. Pull and deploy
             echo "==> Pulling latest images..."
-            docker compose pull backend frontend
+            $COMPOSE pull backend frontend || true
 
             echo "==> Restarting containers..."
-            docker compose up -d --remove-orphans
+            $COMPOSE up -d --remove-orphans
 
             echo "==> Container status:"
-            docker compose ps
+            $COMPOSE ps
