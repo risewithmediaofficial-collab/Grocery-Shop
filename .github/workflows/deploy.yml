@@ -99,13 +99,7 @@ jobs:
       - name: Package Application Code
         if: steps.ssh_check.outputs.can_deploy == 'true'
         run: |
-          tar --exclude='./node_modules' \
-              --exclude='./server/node_modules' \
-              --exclude='./.git' \
-              --exclude='./dist' \
-              --warning=no-file-changed \
-              -czf /tmp/app.tar.gz . || true
-          mv /tmp/app.tar.gz ./app.tar.gz
+          git archive --format=tar.gz -o app.tar.gz HEAD
           ls -lh app.tar.gz
 
       - name: Copy Deploy Bundle to VPS
