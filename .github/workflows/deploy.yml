@@ -96,7 +96,16 @@ jobs:
             echo "::warning::HOST and SSH_KEY secrets are not configured in GitHub repository settings. Skipping VPS deployment."
           fi
 
-      - name: Copy docker-compose to VPS
+      - name: Package Application Code
+        if: steps.ssh_check.outputs.can_deploy == 'true'
+        run: |
+          tar --exclude='./node_modules' \
+              --exclude='./server/node_modules' \
+              --exclude='./.git' \
+              --exclude='./dist' \
+              -czf app.tar.gz .
+
+      - name: Copy Deploy Bundle to VPS
         if: steps.ssh_check.outputs.can_deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -104,7 +113,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT || 22 }}
-          source: "docker-compose.prod.yml"
+          source: "app.tar.gz,docker-compose.prod.yml"
           target: "/tmp"
 
       - name: Deploy on VPS via SSH
@@ -126,7 +135,13 @@ jobs:
             cd "$TARGET_DIR"
             echo "📂 Deploy directory: $(pwd)"
 
-            # 2. Copy docker-compose from /tmp
+            # 2. Unpack application bundle and docker-compose
+            if [ -f /tmp/app.tar.gz ]; then
+              echo "📦 Unpacking application source code..."
+              tar -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
+              rm -f /tmp/app.tar.gz
+            fi
+
             if [ -f /tmp/docker-compose.prod.yml ]; then
               cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml
               rm -f /tmp/docker-compose.prod.yml
@@ -151,31 +166,32 @@ jobs:
               COMPOSE="docker compose"
             fi
 
-            # 5. Create production .env if not exists
+            # 5. Create or fix production .env
             if [ ! -f .env ]; then
               echo "📝 Creating initial production .env..."
               printf "%s\n" \
                 "NODE_ENV=production" \
-                "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" \
+                "DOCKER_USERNAME=grocery" \
                 "IMAGE_TAG=latest" \
                 "MONGO_ROOT_USER=admin" \
-                "MONGO_ROOT_PASSWORD=columbu_secure_mongo_password_2024" \
+                "MONGO_ROOT_PASSWORD=columbu_secret_pwd" \
                 "MONGO_DB_NAME=columbu_stores" \
                 "JWT_SECRET=columbu_super_secure_jwt_secret_change_in_prod_key" \
                 "JWT_EXPIRE=7d" \
                 "FRONTEND_URL=http://${{ secrets.HOST }}:90" > .env
+            else
+              # Fix any legacy password mismatch in existing .env
+              sed -i 's/columbu_secure_mongo_password_2024/columbu_secret_pwd/g' .env 2>/dev/null || true
             fi
 
-            # 6. Pull and deploy
-            echo "==> Pulling latest images..."
-            $COMPOSE pull backend frontend || true
-
-            echo "==> Restarting containers..."
+            # 6. Build or pull latest images and launch
+            echo "==> Building and starting updated containers..."
+            $COMPOSE build
             $COMPOSE up -d --remove-orphans
 
             # 7. Ensure initial store seed data (admin, products, categories)
             echo "==> Ensuring initial database seed data..."
-            sleep 3
+            sleep 8
             $COMPOSE exec -T backend node seed/seed.js || true
 
             echo "==> Container status:"

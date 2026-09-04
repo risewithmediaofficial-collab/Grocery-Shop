@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const User = require('../models/User');
+const connectDB = require('../config/db');
 const { Category, SubCategory, Brand, Unit } = require('../models/Category');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
@@ -13,12 +14,9 @@ const { Setting } = require('../models/System');
 const { StockMovement } = require('../models/Inventory');
 const Order = require('../models/Order');
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/columbu_stores';
-
 async function seed({ exitOnComplete = false } = {}) {
   if (mongoose.connection.readyState !== 1) {
-    await mongoose.connect(MONGO_URI);
-    console.log('Connected to MongoDB');
+    await connectDB();
   }
 
   // Clear existing data
