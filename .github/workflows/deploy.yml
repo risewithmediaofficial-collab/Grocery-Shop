@@ -112,6 +112,8 @@ jobs:
           port: ${{ secrets.PORT || 22 }}
           source: "app.tar.gz,docker-compose.prod.yml"
           target: "/tmp"
+          timeout: 120s
+          command_timeout: 30m
 
       - name: Deploy on VPS via SSH
         if: steps.ssh_check.outputs.can_deploy == 'true'
@@ -121,20 +123,18 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT || 22 }}
-          script_stop: true
+          timeout: 120s
+          command_timeout: 30m
+          script_stop: false
           script: |
-            # 1. Setup target directory (handles root or non-root user)
             TARGET_DIR="/opt/grocery-shop"
             if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
               TARGET_DIR="$HOME/grocery-shop"
               mkdir -p "$TARGET_DIR"
             fi
             cd "$TARGET_DIR"
-            echo "📂 Deploy directory: $(pwd)"
 
-            # 2. Unpack application bundle and docker-compose
             if [ -f /tmp/app.tar.gz ]; then
-              echo "📦 Unpacking application source code..."
               tar -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
               rm -f /tmp/app.tar.gz
             fi
@@ -144,28 +144,21 @@ jobs:
               rm -f /tmp/docker-compose.prod.yml
             fi
 
-            # 3. Ensure Docker is installed
             if ! command -v docker &>/dev/null; then
-              echo "📦 Installing Docker on VPS..."
               curl -fsSL https://get.docker.com | sh
               sudo systemctl enable --now docker 2>/dev/null || true
-              sudo usermod -aG docker "$USER" 2>/dev/null || true
             fi
 
-            # 4. Detect compose command
             if docker compose version &>/dev/null; then
               COMPOSE="docker compose"
             elif command -v docker-compose &>/dev/null; then
               COMPOSE="docker-compose"
             else
-              echo "📦 Installing Docker compose plugin..."
               sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
               COMPOSE="docker compose"
             fi
 
-            # 5. Create or fix production .env
             if [ ! -f .env ]; then
-              echo "📝 Creating initial production .env..."
               printf "%s\n" \
                 "NODE_ENV=production" \
                 "DOCKER_USERNAME=grocery" \
@@ -177,18 +170,15 @@ jobs:
                 "JWT_EXPIRE=7d" \
                 "FRONTEND_URL=http://${{ secrets.HOST }}:90" > .env
             else
-              # Fix any legacy password mismatch in existing .env
               sed -i 's/columbu_secure_mongo_password_2024/columbu_secret_pwd/g' .env 2>/dev/null || true
             fi
 
-            # 6. Build or pull latest images and launch
-            echo "==> Building and starting updated containers..."
-            $COMPOSE build
+            # 6. Pull latest images and launch (images already built & pushed in build job — no rebuild needed)
+            $COMPOSE pull --quiet
             $COMPOSE up -d --remove-orphans
 
-            # 7. Ensure initial store seed data (admin, products, categories)
-            echo "==> Ensuring initial database seed data..."
-            sleep 8
+            # 7. Wait for containers to be ready, then seed DB
+            sleep 15
             $COMPOSE exec -T backend node seed/seed.js || true
 
             echo "==> Container status:"
