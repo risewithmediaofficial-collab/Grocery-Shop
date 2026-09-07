@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import {
   Search, ShoppingCart, Package, Users, Truck, DollarSign,
-  BarChart2, Settings, ExternalLink, ArrowRight, Sparkles, Tag
+  BarChart2, Settings, ExternalLink, ArrowRight, Sparkles, Tag, X
 } from 'lucide-react';
 
 export default function CommandPalette({ isOpen, onClose }) {
@@ -89,10 +89,16 @@ export default function CommandPalette({ isOpen, onClose }) {
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Type a command, page name, or action... (Esc to exit)"
+            placeholder="Type a command, page name, or action..."
             className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none"
           />
-          <kbd className="px-2 py-0.5 text-xs font-semibold text-slate-400 bg-white border border-slate-200 rounded shadow-2xs">ESC</kbd>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         {/* Results List */}

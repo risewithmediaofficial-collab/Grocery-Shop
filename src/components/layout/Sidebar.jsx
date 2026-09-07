@@ -250,7 +250,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
                 <span className="flex items-center gap-2">
                   <PanelLeftClose size={16} /> Collapse Sidebar
                 </span>
-                <span className="text-[10px] text-gray-500 bg-gray-900 px-1.5 py-0.5 rounded">Ctrl+B</span>
               </>
             )}
           </button>
