@@ -92,9 +92,9 @@ export default function SaleDetailPage() {
   return (
     <div className="page-container">
       {/* ── Print-only store header (replaces UI navbar in printout) ── */}
-      <div className="print-store-header">
-        <div className="logo-box">NC</div>
-        <div className="store-info">
+      <div className="print-store-header text-center">
+        <div className="logo-box mx-auto">NC</div>
+        <div className="store-info text-center">
           <p className="store-name">NEW COLUMBU STORES</p>
           <p className="store-sub">Main Road, Krishnagiri, Tamil Nadu – 635001</p>
           <p className="store-sub">GSTIN: 33AABCK1234A1Z5 &nbsp;|&nbsp; Ph: +91 98765 43200</p>

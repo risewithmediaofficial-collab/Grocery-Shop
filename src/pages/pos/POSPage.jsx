@@ -12,6 +12,7 @@ import {
   getProductCategory
 } from '../../utils/groceryVariants';
 import { playScanBeep, playSuccessChime, playWarningTone } from '../../utils/audioFeedback';
+import { printReceipt } from '../../utils/printReceipt';
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -972,8 +973,8 @@ export default function POSPage() {
       toast.success(`Bill saved! Invoice: ${savedSale.invoiceNumber}`);
 
       if (printAfter) {
-        // Navigate to sale detail page which has the print-ready bill
-        window.open(`/sales/${savedSale._id}?print=1`, '_blank');
+        // Directly print receipt via hidden iframe without navigating away from POS screen
+        printReceipt(savedSale);
       }
     } catch (err) {
       playWarningTone();
