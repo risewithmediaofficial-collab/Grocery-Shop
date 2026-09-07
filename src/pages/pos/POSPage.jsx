@@ -400,6 +400,7 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
   const [upi, setUpi] = useState('0');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false); // confirm step
 
   const cashAmt = parseFloat(cash) || 0;
   const upiAmt = parseFloat(upi) || 0;
@@ -414,11 +415,32 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
     { value: 'mixed', label: 'Split', icon: Split },
   ];
 
+  // Split auto-calculation: entering cash auto-fills UPI with remainder
+  const handleCashChange = (val) => {
+    setCash(val);
+    const c = parseFloat(val) || 0;
+    const rem = Math.max(0, grandTotal - c);
+    setUpi(rem > 0 ? String(parseFloat(rem.toFixed(2))) : '0');
+  };
+
+  // Split auto-calculation: entering UPI auto-fills cash with remainder
+  const handleUpiChange = (val) => {
+    setUpi(val);
+    const u = parseFloat(val) || 0;
+    const rem = Math.max(0, grandTotal - u);
+    setCash(rem > 0 ? String(parseFloat(rem.toFixed(2))) : '0');
+  };
+
   const handleComplete = async () => {
     if (method === 'credit' && !customer) {
       toast.error('Please select a customer for credit sales');
       return;
     }
+    // show confirm screen instead of immediately completing
+    setConfirming(true);
+  };
+
+  const handleConfirm = async () => {
     setLoading(true);
     onComplete({ method, cashAmt, upiAmt, paid, change, notes });
   };
@@ -524,16 +546,44 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           )}
 
           {method === 'mixed' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="form-label">Cash (₹)</label>
-                <input className="form-input" type="number" value={cash} onChange={e => setCash(e.target.value)} />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Cash (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
+                    <input
+                      className="form-input pl-7 text-lg font-bold"
+                      type="number"
+                      value={cash}
+                      onChange={e => handleCashChange(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label">UPI (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
+                    <input
+                      className="form-input pl-7 text-lg font-bold"
+                      type="number"
+                      value={upi}
+                      onChange={e => handleUpiChange(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="form-label">UPI (₹)</label>
-                <input className="form-input" type="number" value={upi} onChange={e => setUpi(e.target.value)} />
+              {/* Balance indicator */}
+              <div className={clsx(
+                'rounded-xl px-4 py-2.5 flex items-center justify-between text-sm font-semibold',
+                paid >= grandTotal ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-rose-50 border border-rose-200 text-rose-700'
+              )}>
+                <span>{paid >= grandTotal ? '✅ Fully covered' : '⚠ Remaining'}</span>
+                <span className="text-base font-black">
+                  {paid >= grandTotal ? `Change: ${fmt(change)}` : `Still due: ${fmt(Math.abs(change))}`}
+                </span>
               </div>
-              <p className="col-span-2 text-sm text-gray-600">Paid: {fmt(paid)} / Due: {fmt(grandTotal)}</p>
             </div>
           )}
 
@@ -555,11 +605,83 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
 
         <div className="p-5 pt-0 flex gap-3">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-          <button onClick={handleComplete} disabled={loading} className="btn-primary flex-1 py-3 text-base font-semibold">
+          <button
+            onClick={handleComplete}
+            disabled={loading}
+            className="btn-primary flex-1 py-3 text-base font-semibold"
+          >
             {loading ? 'Processing...' : 'Complete Bill'}
           </button>
         </div>
       </div>
+
+      {/* ── Confirmation overlay ── */}
+      {confirming && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-primary-700 text-white p-5 text-center">
+              <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest">Confirm & Complete</p>
+              <p className="text-3xl font-extrabold mt-1">{fmt(grandTotal)}</p>
+              {customer && <p className="text-xs text-primary-200 mt-1">{customer.name} — {customer.mobile}</p>}
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Method</span>
+                  <span className="font-semibold capitalize">{method === 'mixed' ? 'Split (Cash + UPI)' : method.toUpperCase()}</span>
+                </div>
+                {method === 'cash' && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Cash Tendered</span>
+                      <span className="font-bold">{fmt(cashAmt)}</span>
+                    </div>
+                    {change > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Return Change</span>
+                        <span className="font-black">{fmt(change)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {method === 'mixed' && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Cash</span>
+                      <span className="font-bold">{fmt(cashAmt)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">UPI</span>
+                      <span className="font-bold">{fmt(upiAmt)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-base">
+                  <span>Total Paid</span>
+                  <span className="text-primary-700">{fmt(method === 'mixed' ? cashAmt + upiAmt : method === 'cash' ? cashAmt : grandTotal)}</span>
+                </div>
+              </div>
+              {notes && <p className="text-xs text-gray-500 italic">Note: {notes}</p>}
+            </div>
+            <div className="px-5 pb-5 flex gap-3">
+              <button
+                onClick={() => setConfirming(false)}
+                className="btn-secondary flex-1"
+                disabled={loading}
+              >
+                ← Go Back
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={loading}
+                className="btn-primary flex-1 py-3 text-base font-bold"
+              >
+                {loading ? 'Processing...' : '✓ Confirm & Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
