@@ -92,9 +92,9 @@ export default function SaleDetailPage() {
   return (
     <div className="page-container">
       {/* ── Print-only store header (replaces UI navbar in printout) ── */}
-      <div className="print-store-header text-center">
-        <div className="logo-box mx-auto">NC</div>
-        <div className="store-info text-center">
+      <div className="print-store-header">
+        <div className="logo-box">NC</div>
+        <div className="store-info">
           <p className="store-name">NEW COLUMBU STORES</p>
           <p className="store-sub">Main Road, Krishnagiri, Tamil Nadu – 635001</p>
           <p className="store-sub">GSTIN: 33AABCK1234A1Z5 &nbsp;|&nbsp; Ph: +91 98765 43200</p>
@@ -156,10 +156,13 @@ export default function SaleDetailPage() {
       {/* Mode 1: THERMAL SLIP VIEW */}
       {printMode === 'thermal' ? (
         <div className="card bg-white p-6 max-w-sm mx-auto border border-dashed border-gray-300 shadow-sm font-mono text-xs text-gray-900 print:border-none print:p-1 print:max-w-xs">
-          <div className="text-center space-y-0.5 border-b border-dashed border-gray-400 pb-3 mb-3">
-            <h2 className="font-extrabold text-base tracking-tight">NEW COLUMBU STORES</h2>
-            <p className="text-[11px] text-gray-600">Main Road, Krishnagiri - 635001</p>
-            <p className="text-[11px] text-gray-600">GSTIN: 33AABCK1234A1Z5 | Ph: +91 98765 43200</p>
+          <div className="flex items-center justify-center gap-3 border-b border-dashed border-gray-400 pb-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-[#1a3c5e] text-white flex items-center justify-center font-black text-sm shrink-0">NC</div>
+            <div className="text-left space-y-0.5">
+              <h2 className="font-extrabold text-sm tracking-tight text-gray-900">NEW COLUMBU STORES</h2>
+              <p className="text-[10px] text-gray-600">Main Road, Krishnagiri - 635001</p>
+              <p className="text-[10px] text-gray-600">GSTIN: 33AABCK1234A1Z5 | Ph: +91 98765 43200</p>
+            </div>
           </div>
 
           <div className="space-y-1 border-b border-dashed border-gray-400 pb-2 mb-2 text-[11px]">

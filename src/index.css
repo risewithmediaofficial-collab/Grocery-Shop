@@ -243,33 +243,31 @@
     /* Print store branding header */
     .print-store-header {
       display: flex !important;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
       justify-content: center;
-      text-align: center;
-      gap: 5px;
+      gap: 14px;
       padding: 10px 0;
       border-bottom: 2px solid #111;
       margin-bottom: 12px;
       width: 100%;
     }
     .print-store-header .logo-box {
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
       border-radius: 8px;
       background: #1a3c5e;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 900;
       letter-spacing: -1px;
-      margin: 0 auto 2px auto;
+      flex-shrink: 0;
     }
     .print-store-header .store-info {
-      text-align: center;
-      width: 100%;
+      text-align: left;
     }
     .print-store-header .store-name {
       font-size: 18px;
@@ -277,13 +275,13 @@
       letter-spacing: 1px;
       color: #111;
       margin: 0;
-      text-align: center;
+      text-align: left;
     }
     .print-store-header .store-sub {
       font-size: 10px;
       color: #555;
       margin: 2px 0 0 0;
-      text-align: center;
+      text-align: left;
     }
 
     @page {

@@ -65,38 +65,44 @@ export function printReceipt(sale) {
     }
     .text-center { text-align: center; }
     .header {
-      text-align: center;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
       padding-bottom: 8px;
       border-bottom: 1px dashed #444;
       margin-bottom: 8px;
     }
     .logo-box {
-      width: 40px;
-      height: 40px;
+      width: 38px;
+      height: 38px;
       border-radius: 6px;
       background: #1a3c5e;
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 900;
-      margin: 0 auto 6px auto;
+      flex-shrink: 0;
       text-align: center;
-      line-height: 40px;
+      line-height: 38px;
+    }
+    .store-info {
+      text-align: left;
     }
     .store-name {
-      font-size: 15px;
+      font-size: 13.5px;
       font-weight: 900;
       margin: 0 0 2px 0;
       letter-spacing: 0.5px;
-      text-align: center;
+      color: #000;
     }
     .store-sub {
-      font-size: 10px;
+      font-size: 9.5px;
       color: #333;
       margin: 1px 0;
-      text-align: center;
     }
     .meta-sec {
       border-bottom: 1px dashed #444;
@@ -189,9 +195,11 @@ export function printReceipt(sale) {
 <body>
   <div class="header">
     <div class="logo-box">NC</div>
-    <div class="store-name">NEW COLUMBU STORES</div>
-    <div class="store-sub">Main Road, Krishnagiri, Tamil Nadu – 635001</div>
-    <div class="store-sub">GSTIN: 33AABCK1234A1Z5 | Ph: +91 98765 43200</div>
+    <div class="store-info">
+      <div class="store-name">NEW COLUMBU STORES</div>
+      <div class="store-sub">Main Road, Krishnagiri, Tamil Nadu – 635001</div>
+      <div class="store-sub">GSTIN: 33AABCK1234A1Z5 | Ph: +91 98765 43200</div>
+    </div>
   </div>
 
   <div class="meta-sec">
