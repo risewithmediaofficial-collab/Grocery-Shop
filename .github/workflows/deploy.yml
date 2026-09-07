@@ -36,24 +36,6 @@ jobs:
             echo "::warning::HOST and SSH_KEY secrets are not configured in GitHub repository settings. Skipping VPS deployment."
           fi
 
-      - name: Package Application Code
-        if: steps.ssh_check.outputs.can_deploy == 'true'
-        run: |
-          git archive --format=tar.gz -o app.tar.gz HEAD
-          ls -lh app.tar.gz
-
-      - name: Copy Deploy Bundle to VPS
-        if: steps.ssh_check.outputs.can_deploy == 'true'
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.PORT || 22 }}
-          source: "app.tar.gz,docker-compose.prod.yml"
-          target: "/tmp"
-          overwrite: true
-
       - name: Deploy on VPS via SSH
         if: steps.ssh_check.outputs.can_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
@@ -62,7 +44,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT || 22 }}
-          timeout: 120s
+          timeout: 180s
           command_timeout: 30m
           script_stop: false
           script: |
@@ -88,31 +70,43 @@ jobs:
             cd "$TARGET_DIR"
             echo "📂 Deploy directory: $(pwd)"
 
-            # 2. Unpack application bundle and docker-compose
-            if [ -f /tmp/app.tar.gz ]; then
-              echo "📦 Unpacking application source code..."
-              sudo chown -R "$USER:$USER" "$TARGET_DIR" 2>/dev/null || true
-              sudo chmod -R u+rwX "$TARGET_DIR" 2>/dev/null || true
-
-              if ! tar --no-same-owner --overwrite -xzf /tmp/app.tar.gz -C "$TARGET_DIR" 2>/tmp/tar_err.log; then
-                echo "⚠️ Regular tar extraction had issue, attempting with sudo..."
-                cat /tmp/tar_err.log 2>/dev/null || true
-                sudo tar --no-same-owner --overwrite -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
-                sudo chown -R "$USER:$USER" "$TARGET_DIR" 2>/dev/null || true
+            # 2. Ensure Git is available
+            if ! command -v git &>/dev/null; then
+              echo "📦 Installing Git on VPS..."
+              if command -v sudo &>/dev/null; then
+                sudo apt-get update -qq && sudo apt-get install -y git 2>/dev/null || true
+              else
+                apt-get update -qq && apt-get install -y git 2>/dev/null || true
               fi
-
-              rm -f /tmp/app.tar.gz 2>/dev/null || sudo rm -f /tmp/app.tar.gz 2>/dev/null || true
-              echo "✅ Application source code unpacked."
             fi
 
-            if [ -f /tmp/docker-compose.prod.yml ]; then
+            # Configure git safe directory
+            git config --global --add safe.directory "$TARGET_DIR" 2>/dev/null || true
+            git config --global --add safe.directory "*" 2>/dev/null || true
+
+            # 3. Sync latest source code directly from GitHub
+            echo "📦 Syncing latest source code from GitHub..."
+            REPO_URL="https://github.com/risewithmediaofficial-collab/Grocery-Shop.git"
+            if [ ! -d ".git" ]; then
+              git init
+              git remote add origin "$REPO_URL" 2>/dev/null || git remote set-url origin "$REPO_URL"
+            else
+              git remote set-url origin "$REPO_URL"
+            fi
+
+            git fetch origin main --depth=1
+            git reset --hard origin/main
+            echo "✅ Source code synced to latest commit: $(git rev-parse --short HEAD)"
+
+            # 4. Update docker-compose.yml from production template
+            if [ -f docker-compose.prod.yml ]; then
               echo "📄 Updating docker-compose.yml..."
-              cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml 2>/dev/null || sudo cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml 2>/dev/null || true
-              sudo chown "$USER:$USER" ./docker-compose.yml 2>/dev/null || true
-              rm -f /tmp/docker-compose.prod.yml 2>/dev/null || sudo rm -f /tmp/docker-compose.prod.yml 2>/dev/null || true
+              cp -f docker-compose.prod.yml ./docker-compose.yml
+              chmod 644 ./docker-compose.yml 2>/dev/null || true
+              echo "✅ docker-compose.yml configured."
             fi
 
-            # 3. Ensure Docker is installed
+            # 5. Ensure Docker is installed
             if ! command -v docker &>/dev/null; then
               echo "📦 Installing Docker on VPS..."
               curl -fsSL https://get.docker.com | sh
@@ -120,7 +114,7 @@ jobs:
               sudo usermod -aG docker "$USER" 2>/dev/null || true
             fi
 
-            # 4. Detect compose command (supports sudo if docker daemon socket requires root)
+            # 6. Detect compose command (supports sudo if docker daemon socket requires root)
             DOCKER_BIN="docker"
             if ! docker ps &>/dev/null; then
               if sudo docker ps &>/dev/null; then
@@ -146,7 +140,7 @@ jobs:
             fi
             echo "🚀 Using compose command: $COMPOSE"
 
-            # 5. Create or fix production .env
+            # 7. Create or fix production .env
             if [ ! -f .env ]; then
               echo "📝 Creating initial production .env..."
               printf "%s\n" \
@@ -164,17 +158,18 @@ jobs:
               sed -i 's/columbu_secure_mongo_password_2024/columbu_secret_pwd/g' .env 2>/dev/null || true
             fi
 
-            # 6. Build fresh containers from updated source code and launch
+            # 8. Build fresh containers from updated source code and launch
             echo "==> Building fresh containers from updated source code (no-cache)..."
             $COMPOSE build --no-cache
             echo "==> Starting updated containers..."
             $COMPOSE up -d --force-recreate --remove-orphans
 
-            # 7. Ensure initial store seed data (admin, products, categories)
+            # 9. Ensure initial store seed data (admin, products, categories)
             echo "==> Ensuring initial database seed data..."
             sleep 10
             $COMPOSE exec -T backend node seed/seed.js || true
 
+            # 10. Check container status
             echo "==> Container status:"
             $COMPOSE ps
 
