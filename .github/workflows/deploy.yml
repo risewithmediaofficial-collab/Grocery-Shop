@@ -110,6 +110,7 @@ jobs:
           port: ${{ secrets.PORT || 22 }}
           source: "app.tar.gz,docker-compose.prod.yml"
           target: "/tmp"
+          overwrite: true
 
       - name: Deploy on VPS via SSH
         if: steps.ssh_check.outputs.can_deploy == 'true'
@@ -121,27 +122,52 @@ jobs:
           port: ${{ secrets.PORT || 22 }}
           timeout: 120s
           command_timeout: 30m
-          script_stop: true
+          script_stop: false
           script: |
             # 1. Setup target directory (handles root or non-root user)
             TARGET_DIR="/opt/grocery-shop"
-            if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
+
+            # Ensure target directory exists and is writable by current user
+            if command -v sudo &>/dev/null; then
+              sudo mkdir -p "$TARGET_DIR" 2>/dev/null || true
+              sudo chown -R "$USER:$USER" "$TARGET_DIR" 2>/dev/null || true
+              sudo chmod -R u+rwX "$TARGET_DIR" 2>/dev/null || true
+            else
+              mkdir -p "$TARGET_DIR" 2>/dev/null || true
+            fi
+
+            # Fallback to home directory if /opt is not writable and sudo is unavailable
+            if [ ! -w "$TARGET_DIR" ]; then
+              echo "⚠️ $TARGET_DIR is not writable by $USER, falling back to $HOME/grocery-shop"
               TARGET_DIR="$HOME/grocery-shop"
               mkdir -p "$TARGET_DIR"
             fi
+
             cd "$TARGET_DIR"
             echo "📂 Deploy directory: $(pwd)"
 
             # 2. Unpack application bundle and docker-compose
             if [ -f /tmp/app.tar.gz ]; then
               echo "📦 Unpacking application source code..."
-              tar -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
-              rm -f /tmp/app.tar.gz
+              sudo chown -R "$USER:$USER" "$TARGET_DIR" 2>/dev/null || true
+              sudo chmod -R u+rwX "$TARGET_DIR" 2>/dev/null || true
+
+              if ! tar --no-same-owner --overwrite -xzf /tmp/app.tar.gz -C "$TARGET_DIR" 2>/tmp/tar_err.log; then
+                echo "⚠️ Regular tar extraction had issue, attempting with sudo..."
+                cat /tmp/tar_err.log 2>/dev/null || true
+                sudo tar --no-same-owner --overwrite -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
+                sudo chown -R "$USER:$USER" "$TARGET_DIR" 2>/dev/null || true
+              fi
+
+              rm -f /tmp/app.tar.gz 2>/dev/null || sudo rm -f /tmp/app.tar.gz 2>/dev/null || true
+              echo "✅ Application source code unpacked."
             fi
 
             if [ -f /tmp/docker-compose.prod.yml ]; then
-              cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml
-              rm -f /tmp/docker-compose.prod.yml
+              echo "📄 Updating docker-compose.yml..."
+              cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml 2>/dev/null || sudo cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml 2>/dev/null || true
+              sudo chown "$USER:$USER" ./docker-compose.yml 2>/dev/null || true
+              rm -f /tmp/docker-compose.prod.yml 2>/dev/null || sudo rm -f /tmp/docker-compose.prod.yml 2>/dev/null || true
             fi
 
             # 3. Ensure Docker is installed
@@ -152,16 +178,31 @@ jobs:
               sudo usermod -aG docker "$USER" 2>/dev/null || true
             fi
 
-            # 4. Detect compose command
-            if docker compose version &>/dev/null; then
-              COMPOSE="docker compose"
+            # 4. Detect compose command (supports sudo if docker daemon socket requires root)
+            DOCKER_BIN="docker"
+            if ! docker ps &>/dev/null; then
+              if sudo docker ps &>/dev/null; then
+                DOCKER_BIN="sudo docker"
+                echo "ℹ️ Using sudo for Docker commands."
+              fi
+            fi
+
+            if $DOCKER_BIN compose version &>/dev/null; then
+              COMPOSE="$DOCKER_BIN compose"
             elif command -v docker-compose &>/dev/null; then
               COMPOSE="docker-compose"
+            elif sudo command -v docker-compose &>/dev/null; then
+              COMPOSE="sudo docker-compose"
             else
               echo "📦 Installing Docker compose plugin..."
-              sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
-              COMPOSE="docker compose"
+              sudo apt-get update -qq && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
+              if $DOCKER_BIN compose version &>/dev/null; then
+                COMPOSE="$DOCKER_BIN compose"
+              else
+                COMPOSE="sudo docker compose"
+              fi
             fi
+            echo "🚀 Using compose command: $COMPOSE"
 
             # 5. Create or fix production .env
             if [ ! -f .env ]; then
@@ -182,9 +223,10 @@ jobs:
             fi
 
             # 6. Build fresh containers from updated source code and launch
-            echo "==> Building and starting updated containers from latest code..."
-            $COMPOSE build
-            $COMPOSE up -d --remove-orphans
+            echo "==> Building fresh containers from updated source code (no-cache)..."
+            $COMPOSE build --no-cache
+            echo "==> Starting updated containers..."
+            $COMPOSE up -d --force-recreate --remove-orphans
 
             # 7. Ensure initial store seed data (admin, products, categories)
             echo "==> Ensuring initial database seed data..."
@@ -193,3 +235,4 @@ jobs:
 
             echo "==> Container status:"
             $COMPOSE ps
+
