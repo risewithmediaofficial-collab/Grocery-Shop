@@ -1186,7 +1186,7 @@ export default function CustomerOrderPage() {
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOtpAndLogin} className="space-y-4">
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <div className="text-center">
                   <p className="text-xs text-gray-500 font-medium">Enter the 6-digit verification code sent to your mobile</p>
                   {serverDemoOtp && (
