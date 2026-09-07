@@ -88,6 +88,10 @@ describe('OrdersPage Component & Workflow Features', () => {
     localStorage.setItem('token', 'token');
     localStorage.setItem('user', JSON.stringify({ name: 'Cashier Staff', role: 'cashier' }));
     api.get.mockImplementation((url) => {
+      if (url.includes('/auth/me')) {
+        const stored = localStorage.getItem('user');
+        return Promise.resolve({ data: { user: stored ? JSON.parse(stored) : null } });
+      }
       if (url.includes('/orders')) return Promise.resolve({ data: { data: dummyOrders } });
       if (url.includes('/products')) return Promise.resolve({ data: { data: dummyCatalog } });
       return Promise.resolve({ data: { data: [] } });
@@ -393,5 +397,46 @@ describe('OrdersPage Component & Workflow Features', () => {
 
     // Packing checklist drawer opens automatically after acceptance
     expect(screen.getByText(/Packing Checklist:/i)).toBeInTheDocument();
+  });
+
+  it('renders Assign buttons for cashier staff and hides them completely for packers', async () => {
+    // 1. Cashier session - Assign button should be visible
+    localStorage.setItem('user', JSON.stringify({ name: 'Karthik Cashier', role: 'cashier' }));
+
+    let view;
+    await act(async () => {
+      view = render(
+        <MemoryRouter>
+          <AuthProvider>
+            <CartProvider>
+              <OrdersPage />
+            </CartProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    const assignBtns = screen.getAllByTitle(/Assign to a packer/i);
+    expect(assignBtns.length).toBeGreaterThan(0);
+
+    view.unmount();
+
+    // 2. Packer session - Assign button should NOT exist
+    localStorage.setItem('user', JSON.stringify({ name: 'Murugan Packer', role: 'packer' }));
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <CartProvider>
+              <OrdersPage />
+            </CartProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    const packerAssignBtns = screen.queryAllByTitle(/Assign to a packer/i);
+    expect(packerAssignBtns.length).toBe(0);
   });
 });

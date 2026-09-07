@@ -29,6 +29,7 @@ import SubcategorySwipeBar from '../../components/common/SubcategorySwipeBar';
 
 export default function OrdersPage() {
   const { user: currentUser } = useAuth();
+  const canAssignOrders = ['admin', 'cashier', 'manager'].includes(currentUser?.role);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTypeParam = searchParams.get('type');
@@ -156,7 +157,7 @@ export default function OrdersPage() {
       const [catRes, ordRes, packersRes] = await Promise.all([
         api.get('/products?status=active&limit=100').catch(() => api.get('/orders/catalog')),
         api.get('/orders').catch(() => ({ data: { data: [] } })),
-        api.get('/users/packers').catch(() => ({ data: { data: [] } })),
+        canAssignOrders ? api.get('/users/packers').catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       ]);
       setCatalog(catRes.data.data || []);
       setOrders(ordRes.data?.data || []);
@@ -166,7 +167,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canAssignOrders]);
 
   useEffect(() => {
     loadData();
@@ -1191,52 +1192,56 @@ export default function OrdersPage() {
                                 </button>
                               )}
 
-                              <button
-                                type="button"
-                                onClick={() => setAssigningOrderId(assigningOrderId === ord._id ? null : ord._id)}
-                                className="btn btn-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold py-1.5 px-2.5 rounded-xl shadow-2xs flex items-center gap-1 cursor-pointer"
-                                title="Assign to a packer"
-                              >
-                                <UserCheck size={13} />
-                                <span>{ord.assignedToName ? 'Reassign' : 'Assign'}</span>
-                              </button>
+                              {canAssignOrders && (
+                                <div className="relative inline-block">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAssigningOrderId(assigningOrderId === ord._id ? null : ord._id)}
+                                    className="btn btn-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold py-1.5 px-2.5 rounded-xl shadow-2xs flex items-center gap-1 cursor-pointer"
+                                    title="Assign to a packer"
+                                  >
+                                    <UserCheck size={13} />
+                                    <span>{ord.assignedToName ? 'Reassign' : 'Assign'}</span>
+                                  </button>
 
-                              {/* Assign Packer Dropdown */}
-                              {assigningOrderId === ord._id && (
-                                <div className="absolute right-0 mt-1 z-50 w-52 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden" style={{ top: '100%' }}>
-                                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                                    <p className="text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">Assign to Packer</p>
-                                  </div>
-                                  <div className="max-h-48 overflow-y-auto py-1">
-                                    {packers.length === 0 ? (
-                                      <p className="text-xs text-gray-400 px-3 py-2">No packers available</p>
-                                    ) : packers.map(p => (
-                                      <button
-                                        key={p._id}
-                                        type="button"
-                                        disabled={savingAssign}
-                                        onClick={() => handleAssignPacker(ord._id, p._id)}
-                                        className={clsx(
-                                          'w-full text-left px-3 py-2 text-xs font-semibold hover:bg-primary-50 hover:text-primary-800 transition-colors cursor-pointer flex items-center gap-2',
-                                          ord.assignedTo === p._id || ord.assignedToName === p.name ? 'bg-indigo-50 text-indigo-800 font-bold' : 'text-gray-700'
-                                        )}
-                                      >
-                                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                          {p.name?.charAt(0)?.toUpperCase()}
-                                        </div>
-                                        <div>
-                                          <p>{p.name}</p>
-                                          <p className="text-[10px] text-gray-400 capitalize">{p.role}</p>
-                                        </div>
-                                        {(ord.assignedTo === p._id || ord.assignedToName === p.name) && (
-                                          <CheckCircle2 size={12} className="text-indigo-600 ml-auto" />
-                                        )}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <div className="px-2 py-1.5 border-t border-gray-100">
-                                    <button type="button" onClick={() => setAssigningOrderId(null)} className="w-full text-xs text-gray-500 hover:text-gray-700 py-1 cursor-pointer">Cancel</button>
-                                  </div>
+                                  {/* Assign Packer Dropdown */}
+                                  {assigningOrderId === ord._id && (
+                                    <div className="absolute right-0 mt-1 z-50 w-52 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden" style={{ top: '100%' }}>
+                                      <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                                        <p className="text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">Assign to Packer</p>
+                                      </div>
+                                      <div className="max-h-48 overflow-y-auto py-1">
+                                        {packers.length === 0 ? (
+                                          <p className="text-xs text-gray-400 px-3 py-2">No packers available</p>
+                                        ) : packers.map(p => (
+                                          <button
+                                            key={p._id}
+                                            type="button"
+                                            disabled={savingAssign}
+                                            onClick={() => handleAssignPacker(ord._id, p._id)}
+                                            className={clsx(
+                                              'w-full text-left px-3 py-2 text-xs font-semibold hover:bg-primary-50 hover:text-primary-800 transition-colors cursor-pointer flex items-center gap-2',
+                                              ord.assignedTo === p._id || ord.assignedToName === p.name ? 'bg-indigo-50 text-indigo-800 font-bold' : 'text-gray-700'
+                                            )}
+                                          >
+                                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                                              {p.name?.charAt(0)?.toUpperCase()}
+                                            </div>
+                                            <div>
+                                              <p>{p.name}</p>
+                                              <p className="text-[10px] text-gray-400 capitalize">{p.role}</p>
+                                            </div>
+                                            {(ord.assignedTo === p._id || ord.assignedToName === p.name) && (
+                                              <CheckCircle2 size={12} className="text-indigo-600 ml-auto" />
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <div className="px-2 py-1.5 border-t border-gray-100">
+                                        <button type="button" onClick={() => setAssigningOrderId(null)} className="w-full text-xs text-gray-500 hover:text-gray-700 py-1 cursor-pointer">Cancel</button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
@@ -1503,6 +1508,18 @@ export default function OrdersPage() {
                     </div>
                   )}
 
+                  {selectedOrderDetails.assignedToName && (
+                    <div className="bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
+                      <UserCheck size={14} className="text-indigo-600" />
+                      <span>Packer Assigned: <strong>{selectedOrderDetails.assignedToName === currentUser?.name ? 'You' : selectedOrderDetails.assignedToName}</strong></span>
+                      {selectedOrderDetails.assignedByName && (
+                        <span className="text-indigo-600 text-[11px] font-normal">
+                          (Assigned by {selectedOrderDetails.assignedByName === currentUser?.name ? 'You' : selectedOrderDetails.assignedByName})
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {selectedOrderDetails.sentToBilling && (
                     <div className="bg-purple-50 text-purple-800 border border-purple-200 rounded-xl px-3 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
                       <span>Loaded to Billing POS by: <strong>{selectedOrderDetails.sentToBillingBy || selectedOrderDetails.acceptedByName || selectedOrderDetails.confirmedByName || 'Staff'}</strong></span>
@@ -1640,7 +1657,7 @@ export default function OrdersPage() {
               <div className="mx-6 mt-4 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-900 font-semibold shadow-xs animate-pulse">
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-amber-600 shrink-0" />
-                  <span>This order is awaiting acceptance. Accept it now to confirm and assign yourself as the packer.</span>
+                  <span>This order is awaiting acceptance. Accept it now to confirm and proceed to packing.</span>
                 </div>
                 <button
                   type="button"

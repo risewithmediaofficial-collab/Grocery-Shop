@@ -16,18 +16,25 @@ const app = require('../app');
 
 const secret = process.env.JWT_SECRET || 'kolambu_super_secret_jwt_key_2024_change_in_production';
 const testToken = jwt.sign({ id: '60d5ec49f1b2c8b1f8e4e1a1' }, secret);
+const packerToken = jwt.sign({ id: '60d5ec49f1b2c8b1f8e4e1a2' }, secret);
 
 describe('Orders and Exchanges Routes (Backend API)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
 
-    vi.spyOn(User, 'findById').mockReturnValue({
-      select: vi.fn().mockResolvedValue({
-        _id: '60d5ec49f1b2c8b1f8e4e1a1',
-        name: 'Karthik Admin',
-        role: 'admin',
+    vi.spyOn(User, 'findById').mockImplementation((id) => {
+      const idStr = String(id?._id || id);
+      const isPacker = idStr === '60d5ec49f1b2c8b1f8e4e1a2';
+      const userObj = {
+        _id: isPacker ? '60d5ec49f1b2c8b1f8e4e1a2' : '60d5ec49f1b2c8b1f8e4e1a1',
+        name: isPacker ? 'Murugan Packer' : 'Karthik Admin',
+        role: isPacker ? 'packer' : 'admin',
         isActive: true,
-      }),
+      };
+      return {
+        ...userObj,
+        select: vi.fn().mockResolvedValue(userObj),
+      };
     });
 
     vi.spyOn(Customer, 'findOne').mockResolvedValue(null);
@@ -169,6 +176,41 @@ describe('Orders and Exchanges Routes (Backend API)', () => {
       expect(mockOrder.acceptedByRole).toBe('admin');
       expect(mockOrder.acceptedAt).toBeDefined();
       expect(mockOrder.save).toHaveBeenCalled();
+    });
+
+    it('PUT /api/orders/:id/assign allows admin or cashier to assign order to a packer', async () => {
+      const mockOrder = {
+        _id: '60d5ec49f1b2c8b1f8e4e1b1',
+        orderNumber: 'ORD-9901',
+        customerName: 'Anand',
+        status: 'confirmed',
+        statusLogs: [],
+        save: vi.fn().mockResolvedValue(true),
+      };
+
+      vi.spyOn(Order, 'findById').mockResolvedValue(mockOrder);
+
+      const res = await request(app)
+        .put('/api/orders/60d5ec49f1b2c8b1f8e4e1b1/assign')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ packerId: '60d5ec49f1b2c8b1f8e4e1a2', packerName: 'Murugan Packer' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(mockOrder.assignedToName).toBe('Murugan Packer');
+      expect(mockOrder.assignedByName).toBe('Karthik Admin');
+      expect(mockOrder.save).toHaveBeenCalled();
+    });
+
+    it('PUT /api/orders/:id/assign blocks packer staff from assigning orders with 403 Forbidden', async () => {
+      const res = await request(app)
+        .put('/api/orders/60d5ec49f1b2c8b1f8e4e1b1/assign')
+        .set('Authorization', `Bearer ${packerToken}`)
+        .send({ packerId: '60d5ec49f1b2c8b1f8e4e1a2' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain("Role 'packer' is not authorized");
     });
   });
 

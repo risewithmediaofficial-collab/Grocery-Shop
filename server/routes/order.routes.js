@@ -5,7 +5,7 @@ const Customer = require('../models/Customer');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { Notification } = require('../models/System');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const whatsappService = require('../services/whatsapp.service');
 const auditService = require('../services/audit.service');
 
@@ -362,8 +362,8 @@ router.put('/:id/accept', protect, async (req, res) => {
   }
 });
 
-// PUT /api/orders/:id/assign — assign an order to an available packer or staff member
-router.put('/:id/assign', protect, async (req, res) => {
+// PUT /api/orders/:id/assign - assign an order to an available packer or staff member (admin, cashier, manager only)
+router.put('/:id/assign', protect, authorize('admin', 'cashier', 'manager'), async (req, res) => {
   try {
     const { packerId, packerName } = req.body;
     if (!packerId) return res.status(400).json({ success: false, message: 'Packer ID is required' });
