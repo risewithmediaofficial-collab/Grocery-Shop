@@ -1,6 +1,11 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  Grocery Shop — Simple CI/CD Deployment Workflow
-#  Single-cluster deployment via Docker & SSH
+#  Grocery Shop — CI/CD Deployment Workflow
+#
+#  Architecture:
+#    GitHub → Build & push images to Docker Hub
+#           → SSH into VPS → docker compose pull → docker compose up -d
+#
+#  The VPS never builds from source. Zero source code is copied to VPS.
 # ═══════════════════════════════════════════════════════════════════════════
 
 name: Build & Deploy
@@ -8,12 +13,12 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
-  # ─────────────────────────────────────────────
-  #  1. Build & Push Docker Images
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  #  Job 1 — Build Docker images and push to Docker Hub
+  # ─────────────────────────────────────────────────────────────────────────
   build:
     name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
@@ -22,20 +27,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Check Docker Hub Secrets
+      - name: Validate Docker Hub Secrets
         id: docker_auth
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           if [ -n "$DOCKER_USER" ] && [ -n "$DOCKER_PASS" ]; then
-            echo "has_auth=true" >> "$GITHUB_OUTPUT"
+            echo "has_auth=true"  >> "$GITHUB_OUTPUT"
             echo "repo=$DOCKER_USER" >> "$GITHUB_OUTPUT"
-            echo "✅ Docker credentials detected. Images will be built and pushed to Docker Hub."
           else
             echo "has_auth=false" >> "$GITHUB_OUTPUT"
-            echo "repo=grocery" >> "$GITHUB_OUTPUT"
-            echo "::warning::DOCKER_USERNAME and DOCKER_PASSWORD are not set in GitHub repository secrets. Images will be built to verify compilation, but will not be pushed."
+            echo "repo=grocery"   >> "$GITHUB_OUTPUT"
+            echo "::warning::DOCKER_USERNAME / DOCKER_PASSWORD not set — images will build but not push."
           fi
 
       - name: Set up Docker Buildx
@@ -63,26 +67,27 @@ jobs:
         with:
           context: .
           file: Dockerfile.frontend
-          build-args: |
-            VITE_API_URL=/api
+          build-args: VITE_API_URL=/api
           push: ${{ steps.docker_auth.outputs.has_auth == 'true' }}
           tags: ${{ steps.docker_auth.outputs.repo }}/grocery-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─────────────────────────────────────────────
-  #  2. Deploy to VPS via SSH
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  #  Job 2 — Deploy: SSH → pull images from Docker Hub → compose up
+  #
+  #  ✅ No source code is copied to the VPS
+  #  ✅ No SCP / git archive / tar steps
+  #  ✅ docker-compose.yml is written inline over SSH
+  #  ✅ VPS only needs: Docker + .env
+  # ─────────────────────────────────────────────────────────────────────────
   deploy:
     name: 🚀 Deploy to Server
-    needs: [build]
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Check VPS SSH Secrets
+      - name: Validate VPS Secrets
         id: ssh_check
         env:
           HOST: ${{ secrets.HOST }}
@@ -90,32 +95,12 @@ jobs:
         run: |
           if [ -n "$HOST" ] && [ -n "$SSH_KEY" ]; then
             echo "can_deploy=true" >> "$GITHUB_OUTPUT"
-            echo "✅ VPS secrets detected. Proceeding with deployment."
           else
             echo "can_deploy=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::HOST and SSH_KEY secrets are not configured in GitHub repository settings. Skipping VPS deployment."
+            echo "::warning::HOST / SSH_KEY secrets not set — skipping VPS deployment."
           fi
 
-      - name: Package Application Code
-        if: steps.ssh_check.outputs.can_deploy == 'true'
-        run: |
-          git archive --format=tar.gz -o app.tar.gz HEAD
-          ls -lh app.tar.gz
-
-      - name: Copy Deploy Bundle to VPS
-        if: steps.ssh_check.outputs.can_deploy == 'true'
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.PORT || 22 }}
-          source: "app.tar.gz,docker-compose.prod.yml"
-          target: "/tmp"
-          timeout: 120s
-          command_timeout: 30m
-
-      - name: Deploy on VPS via SSH
+      - name: SSH → Pull images → Compose up
         if: steps.ssh_check.outputs.can_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -127,41 +112,105 @@ jobs:
           command_timeout: 30m
           script_stop: false
           script: |
-            TARGET_DIR="/opt/grocery-shop"
-            if ! mkdir -p "$TARGET_DIR" 2>/dev/null; then
-              TARGET_DIR="$HOME/grocery-shop"
-              mkdir -p "$TARGET_DIR"
-            fi
-            cd "$TARGET_DIR"
+            # ── 1. Working directory ───────────────────────────────────
+            DIR="/opt/grocery-shop"
+            mkdir -p "$DIR" 2>/dev/null || { DIR="$HOME/grocery-shop"; mkdir -p "$DIR"; }
+            cd "$DIR"
 
-            if [ -f /tmp/app.tar.gz ]; then
-              tar -xzf /tmp/app.tar.gz -C "$TARGET_DIR"
-              rm -f /tmp/app.tar.gz
-            fi
-
-            if [ -f /tmp/docker-compose.prod.yml ]; then
-              cp -f /tmp/docker-compose.prod.yml ./docker-compose.yml
-              rm -f /tmp/docker-compose.prod.yml
-            fi
-
+            # ── 2. Ensure Docker is present ───────────────────────────
             if ! command -v docker &>/dev/null; then
               curl -fsSL https://get.docker.com | sh
               sudo systemctl enable --now docker 2>/dev/null || true
             fi
 
+            # ── 3. Pick compose command ────────────────────────────────
             if docker compose version &>/dev/null; then
               COMPOSE="docker compose"
             elif command -v docker-compose &>/dev/null; then
               COMPOSE="docker-compose"
             else
-              sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
+              sudo apt-get update -qq && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
               COMPOSE="docker compose"
             fi
 
+            # ── 4. Write docker-compose.yml inline — no SCP needed ─────
+            cat > docker-compose.yml << 'EOF'
+            services:
+
+              mongo:
+                image: mongo:7-jammy
+                container_name: grocery-mongo
+                restart: unless-stopped
+                environment:
+                  MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+                  MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-columbu_secret_pwd}
+                  MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-columbu_stores}
+                volumes:
+                  - mongo-data:/data/db
+                networks:
+                  - app-network
+                healthcheck:
+                  test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+                  start_period: 10s
+
+              backend:
+                image: ${DOCKER_USERNAME:-grocery}/grocery-backend:${IMAGE_TAG:-latest}
+                container_name: grocery-backend
+                restart: unless-stopped
+                environment:
+                  NODE_ENV: production
+                  PORT: 5000
+                  MONGODB_URI: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-columbu_secret_pwd}@mongo:27017/${MONGO_DB_NAME:-columbu_stores}?authSource=admin
+                  JWT_SECRET: ${JWT_SECRET:-grocery_super_secure_jwt_secret_change_in_prod}
+                  JWT_EXPIRE: ${JWT_EXPIRE:-7d}
+                  FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+                depends_on:
+                  mongo:
+                    condition: service_healthy
+                networks:
+                  - app-network
+                healthcheck:
+                  test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+                  start_period: 30s
+
+              frontend:
+                image: ${DOCKER_USERNAME:-grocery}/grocery-frontend:${IMAGE_TAG:-latest}
+                container_name: grocery-frontend
+                restart: unless-stopped
+                ports:
+                  - "90:90"
+                depends_on:
+                  backend:
+                    condition: service_healthy
+                networks:
+                  - app-network
+                healthcheck:
+                  test: ["CMD", "wget", "-qO-", "http://localhost:90"]
+                  interval: 15s
+                  timeout: 5s
+                  retries: 3
+                  start_period: 10s
+
+            networks:
+              app-network:
+                driver: bridge
+
+            volumes:
+              mongo-data:
+                name: grocery_mongo_data
+            EOF
+
+            # ── 5. Bootstrap .env (only on first deploy) ───────────────
             if [ ! -f .env ]; then
               printf "%s\n" \
                 "NODE_ENV=production" \
-                "DOCKER_USERNAME=grocery" \
+                "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" \
                 "IMAGE_TAG=latest" \
                 "MONGO_ROOT_USER=admin" \
                 "MONGO_ROOT_PASSWORD=columbu_secret_pwd" \
@@ -169,11 +218,9 @@ jobs:
                 "JWT_SECRET=columbu_super_secure_jwt_secret_change_in_prod_key" \
                 "JWT_EXPIRE=7d" \
                 "FRONTEND_URL=http://${{ secrets.HOST }}:90" > .env
-            else
-              sed -i 's/columbu_secure_mongo_password_2024/columbu_secret_pwd/g' .env 2>/dev/null || true
             fi
 
-            # 6. Pull latest images and launch (images already built & pushed in build job — no rebuild needed)
+            # ── 6. Pull latest images → restart containers ─────────────
             $COMPOSE pull --quiet
             $COMPOSE up -d --remove-orphans
 

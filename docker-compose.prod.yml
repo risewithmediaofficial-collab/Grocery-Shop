@@ -26,9 +26,6 @@ services:
 
   # ── Backend API (Express.js) ────────────────────────────────────────
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
     image: ${DOCKER_USERNAME:-grocery}/grocery-backend:${IMAGE_TAG:-latest}
     container_name: grocery-backend
     restart: unless-stopped
@@ -53,11 +50,6 @@ services:
 
   # ── Frontend (Vite/React + Nginx API Proxy) ──────────────────────────
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      args:
-        VITE_API_URL: /api
     image: ${DOCKER_USERNAME:-grocery}/grocery-frontend:${IMAGE_TAG:-latest}
     container_name: grocery-frontend
     restart: unless-stopped
