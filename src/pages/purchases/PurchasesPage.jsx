@@ -75,7 +75,7 @@ function PurchaseFormModal({ suppliers, products, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 overflow-y-auto p-4 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 overflow-y-auto p-4 flex items-center justify-center">
       <div className="bg-white rounded-xl max-w-3xl w-full shadow-2xl my-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b">
           <div>

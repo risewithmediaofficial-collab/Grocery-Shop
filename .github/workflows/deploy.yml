@@ -59,8 +59,8 @@ jobs:
           file: Dockerfile.backend
           push: ${{ steps.docker_auth.outputs.has_auth == 'true' }}
           tags: ${{ steps.docker_auth.outputs.repo }}/grocery-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No layer cache — ensures every push reflects the latest source code
+          no-cache: true
 
       - name: Build & Push Frontend Image
         uses: docker/build-push-action@v5
@@ -70,8 +70,8 @@ jobs:
           build-args: VITE_API_URL=/api
           push: ${{ steps.docker_auth.outputs.has_auth == 'true' }}
           tags: ${{ steps.docker_auth.outputs.repo }}/grocery-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No layer cache — ensures every push reflects the latest source code
+          no-cache: true
 
   # ─────────────────────────────────────────────────────────────────────────
   #  Job 2 — Deploy: SSH → pull images from Docker Hub → compose up
@@ -221,8 +221,9 @@ jobs:
             fi
 
             # ── 6. Pull latest images → restart containers ─────────────
-            $COMPOSE pull --quiet
-            $COMPOSE up -d --remove-orphans
+            # --pull always: force re-pull even if the :latest tag already exists locally
+            $COMPOSE pull
+            $COMPOSE up -d --remove-orphans --pull always
 
             # 7. Wait for containers to be ready, then seed DB
             sleep 15

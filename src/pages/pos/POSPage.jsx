@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Search, X, Plus, Minus, ShoppingCart, User, Pause,
-  Trash2, Check, RotateCcw, Package, Sparkles,
+  Trash2, Check, RotateCcw, Package,
   Phone, AlertCircle, Banknote, CreditCard, QrCode, FileText, Split, Clock, Scale, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -394,13 +394,12 @@ function RepeatPurchasePromptModal({ currentCart, targetCustomer, onHoldAndLoad,
 }
 
 // Payment Modal
-function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, onComplete, onClose }) {
+function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, onSave, onSaveAndPrint, onClose }) {
   const [method, setMethod] = useState('cash');
   const [cash, setCash] = useState(grandTotal.toString());
   const [upi, setUpi] = useState('0');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const [confirming, setConfirming] = useState(false); // confirm step
 
   const cashAmt = parseFloat(cash) || 0;
   const upiAmt = parseFloat(upi) || 0;
@@ -431,28 +430,46 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
     setCash(rem > 0 ? String(parseFloat(rem.toFixed(2))) : '0');
   };
 
-  const handleComplete = async () => {
+  const validate = () => {
     if (method === 'credit' && !customer) {
       toast.error('Please select a customer for credit sales');
-      return;
+      return false;
     }
-    // show confirm screen instead of immediately completing
-    setConfirming(true);
+    return true;
   };
 
-  const handleConfirm = async () => {
+  const handleComplete = () => {
+    if (!validate()) return;
     setLoading(true);
-    onComplete({ method, cashAmt, upiAmt, paid, change, notes });
+    onSave({ method, cashAmt, upiAmt, paid, change, notes });
+  };
+
+  const handleCompleteAndPrint = () => {
+    if (!validate()) return;
+    setLoading(true);
+    onSaveAndPrint({ method, cashAmt, upiAmt, paid, change, notes });
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
         <div className="bg-primary-700 text-white p-5">
-          <p className="text-xs font-semibold text-primary-200 uppercase">Complete Billing</p>
-          <div className="flex justify-between items-baseline mt-1">
-            <h2 className="text-2xl font-bold">Total Amount</h2>
-            <span className="text-3xl font-extrabold">{fmt(grandTotal)}</span>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-primary-200 uppercase">Complete Billing</p>
+              <div className="flex justify-between items-baseline mt-1 pr-3">
+                <h2 className="text-2xl font-bold">Total Amount</h2>
+                <span className="text-3xl font-extrabold">{fmt(grandTotal)}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors shrink-0 -mr-1 -mt-1"
+              title="Close"
+            >
+              <X size={18} />
+            </button>
           </div>
           {customer && <p className="text-xs text-primary-200 mt-1">Customer: {customer.name} ({customer.mobile})</p>}
           {totalSavings > 0 && (
@@ -483,35 +500,6 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
 
           {method === 'cash' && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="form-label mb-0">Cash Tendered</label>
-                <span className="text-[11px] text-gray-400 font-medium">1-Click Presets</span>
-              </div>
-
-              {/* Quick Cash Presets */}
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCash(String(Math.ceil(grandTotal)))}
-                  className="quick-cash-chip text-xs py-1 px-2.5 bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 font-bold"
-                >
-                  Exact ({fmt(grandTotal)})
-                </button>
-                {[100, 200, 500, 2000].map(val => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setCash(String(val))}
-                    className={clsx(
-                      'quick-cash-chip text-xs py-1 px-2.5',
-                      cashAmt === val ? 'bg-primary-600 text-white border-primary-600' : 'bg-gray-50 text-gray-700'
-                    )}
-                  >
-                    ₹{val}
-                  </button>
-                ))}
-              </div>
-
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
                 <input
@@ -574,16 +562,11 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
                   </div>
                 </div>
               </div>
-              {/* Balance indicator */}
-              <div className={clsx(
-                'rounded-xl px-4 py-2.5 flex items-center justify-between text-sm font-semibold',
-                paid >= grandTotal ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-rose-50 border border-rose-200 text-rose-700'
-              )}>
-                <span>{paid >= grandTotal ? '✅ Fully covered' : '⚠ Remaining'}</span>
-                <span className="text-base font-black">
-                  {paid >= grandTotal ? `Change: ${fmt(change)}` : `Still due: ${fmt(Math.abs(change))}`}
-                </span>
-              </div>
+              {paid < grandTotal && (
+                <p className="text-xs font-semibold text-rose-500 flex items-center gap-1">
+                  <AlertCircle size={13} /> Still due: {fmt(Math.abs(change))}
+                </p>
+              )}
             </div>
           )}
 
@@ -603,85 +586,24 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
           </div>
         </div>
 
-        <div className="p-5 pt-0 flex gap-3">
-          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+        <div className="p-5 pt-0 flex gap-2">
+          <button onClick={onClose} disabled={loading} className="btn-secondary flex-1">Cancel</button>
           <button
             onClick={handleComplete}
             disabled={loading}
-            className="btn-primary flex-1 py-3 text-base font-semibold"
+            className="btn-primary flex-1 py-3 text-sm font-bold"
           >
-            {loading ? 'Processing...' : 'Complete Bill'}
+            {loading ? 'Saving...' : 'Complete Bill'}
+          </button>
+          <button
+            onClick={handleCompleteAndPrint}
+            disabled={loading}
+            className="flex-1 py-3 text-sm font-bold rounded-xl border-2 border-primary-600 text-primary-700 bg-primary-50 hover:bg-primary-100 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            🖨️ {loading ? '...' : 'Print Bill'}
           </button>
         </div>
       </div>
-
-      {/* ── Confirmation overlay ── */}
-      {confirming && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-primary-700 text-white p-5 text-center">
-              <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest">Confirm & Complete</p>
-              <p className="text-3xl font-extrabold mt-1">{fmt(grandTotal)}</p>
-              {customer && <p className="text-xs text-primary-200 mt-1">{customer.name} — {customer.mobile}</p>}
-            </div>
-            <div className="p-5 space-y-3">
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Method</span>
-                  <span className="font-semibold capitalize">{method === 'mixed' ? 'Split (Cash + UPI)' : method.toUpperCase()}</span>
-                </div>
-                {method === 'cash' && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Cash Tendered</span>
-                      <span className="font-bold">{fmt(cashAmt)}</span>
-                    </div>
-                    {change > 0 && (
-                      <div className="flex justify-between text-emerald-700">
-                        <span>Return Change</span>
-                        <span className="font-black">{fmt(change)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                {method === 'mixed' && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Cash</span>
-                      <span className="font-bold">{fmt(cashAmt)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">UPI</span>
-                      <span className="font-bold">{fmt(upiAmt)}</span>
-                    </div>
-                  </>
-                )}
-                <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-base">
-                  <span>Total Paid</span>
-                  <span className="text-primary-700">{fmt(method === 'mixed' ? cashAmt + upiAmt : method === 'cash' ? cashAmt : grandTotal)}</span>
-                </div>
-              </div>
-              {notes && <p className="text-xs text-gray-500 italic">Note: {notes}</p>}
-            </div>
-            <div className="px-5 pb-5 flex gap-3">
-              <button
-                onClick={() => setConfirming(false)}
-                className="btn-secondary flex-1"
-                disabled={loading}
-              >
-                ← Go Back
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={loading}
-                className="btn-primary flex-1 py-3 text-base font-bold"
-              >
-                {loading ? 'Processing...' : '✓ Confirm & Bill'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1011,7 +933,7 @@ export default function POSPage() {
     }
   };
 
-  const completeSale = async ({ method, cashAmt, upiAmt, paid, _change, notes }) => {
+  const completeSale = async ({ method, cashAmt, upiAmt, paid, _change, notes }, printAfter = false) => {
     try {
       const items = cart.cartItems.map(item => {
         const baseProductId = item.productId || (typeof item._id === 'string' && item._id.includes('_') ? item._id.split('_')[0] : item._id);
@@ -1041,15 +963,21 @@ export default function POSPage() {
         notes,
       });
 
-      setLastInvoice(res.data.data);
+      const savedSale = res.data.data;
+      setLastInvoice(savedSale);
       cart.clearCart();
       setShowPayment(false);
       setShowMobileCart(false);
       playSuccessChime();
-      toast.success(`Bill completed! Invoice: ${res.data.data.invoiceNumber}`);
+      toast.success(`Bill saved! Invoice: ${savedSale.invoiceNumber}`);
+
+      if (printAfter) {
+        // Navigate to sale detail page which has the print-ready bill
+        window.open(`/sales/${savedSale._id}?print=1`, '_blank');
+      }
     } catch (err) {
       playWarningTone();
-      toast.error(err.response?.data?.message || 'Failed to complete sale');
+      toast.error(err.response?.data?.message || 'Failed to save sale');
     }
   };
 
@@ -1092,18 +1020,6 @@ export default function POSPage() {
     { key: 'household', label: 'Household Care' },
   ];
 
-  // Fast-Moving staples for 1-click zero-typing cashier billing
-  const quickStaples = useMemo(() => {
-    if (!allCatalogProducts || allCatalogProducts.length === 0) return [];
-    const stapleKeywords = ['milk', 'curd', 'bread', 'egg', 'sugar', 'salt', 'tomato', 'onion', 'potato', 'rice', 'atta', 'tea', 'biscuit', 'oil', 'dal'];
-    const matched = [];
-    for (const kw of stapleKeywords) {
-      const found = allCatalogProducts.find(p => p.name?.toLowerCase().includes(kw) && !matched.some(m => m._id === p._id));
-      if (found) matched.push(found);
-      if (matched.length >= 10) break;
-    }
-    return matched.length > 0 ? matched : allCatalogProducts.slice(0, 8);
-  }, [allCatalogProducts]);
 
   const renderBillContent = () => (
     <div className="flex flex-col flex-1 min-h-0">
@@ -1423,31 +1339,6 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Fast-Moving Staples Quick Picks */}
-        {quickStaples.length > 0 && !searchQuery && (
-          <div className="bg-slate-50/90 p-2 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between mb-1.5 px-1">
-              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles size={12} className="text-amber-500" /> Fast-Moving Staples
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium">1-click billing</span>
-            </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              {quickStaples.map(p => (
-                <button
-                  key={p._id}
-                  type="button"
-                  onClick={() => handleSelectProduct(p)}
-                  className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:text-emerald-800 transition-all shrink-0 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
-                  title={`Quick add ${p.name}`}
-                >
-                  <span className="truncate max-w-[110px]">⚡ {p.name}</span>
-                  <span className="text-emerald-600 font-bold">₹{p.sellingPrice}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           {CATEGORY_TABS.map(tab => (
@@ -1653,11 +1544,12 @@ export default function POSPage() {
 
       {showPayment && (
         <PaymentModal
+          onSaveAndPrint={(payData) => completeSale(payData, true)}
           grandTotal={cart.grandTotal}
           totalSavings={cart.totalSavings}
           savingsPercentage={cart.savingsPercentage}
           customer={cart.customer}
-          onComplete={completeSale}
+          onSave={completeSale}
           onClose={() => setShowPayment(false)}
         />
       )}
@@ -1673,7 +1565,7 @@ export default function POSPage() {
 
       {/* Held Bills Modal */}
       {showHeldModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150" onClick={() => setShowHeldModal(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl p-5 border border-gray-100 flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
               <div className="flex items-center gap-2.5">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Printer, RotateCcw, XCircle, ShoppingBag, CheckCircle, FileText, Store, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -12,6 +12,7 @@ const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractio
 export default function SaleDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const cart = useCart();
   const { isAdmin } = useAuth();
   const [sale, setSale] = useState(null);
@@ -38,6 +39,14 @@ export default function SaleDetailPage() {
       window.print();
     }, 150);
   };
+
+  // Auto-print when opened with ?print=1 (from Save & Print)
+  useEffect(() => {
+    if (searchParams.get('print') === '1' && sale) {
+      handlePrint('thermal');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale, searchParams]);
 
   const handleRepeatInvoice = () => {
     if (!sale) return;
@@ -82,6 +91,16 @@ export default function SaleDetailPage() {
 
   return (
     <div className="page-container">
+      {/* ── Print-only store header (replaces UI navbar in printout) ── */}
+      <div className="print-store-header">
+        <div className="logo-box">NC</div>
+        <div className="store-info">
+          <p className="store-name">NEW COLUMBU STORES</p>
+          <p className="store-sub">Main Road, Krishnagiri, Tamil Nadu – 635001</p>
+          <p className="store-sub">GSTIN: 33AABCK1234A1Z5 &nbsp;|&nbsp; Ph: +91 98765 43200</p>
+        </div>
+      </div>
+
       {/* Top Actions (hidden on print) */}
       <div className="no-print flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
