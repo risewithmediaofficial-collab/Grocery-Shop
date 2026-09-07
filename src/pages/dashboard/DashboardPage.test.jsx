@@ -125,7 +125,7 @@ describe('DashboardPage', () => {
     // Incoming order alert on front page
     expect(await screen.findByText('ORD-00042')).toBeInTheDocument();
     expect(screen.getByText('Ramesh Kumar')).toBeInTheDocument();
-    expect(screen.getByText(/Bill in POS/i)).toBeInTheDocument();
+    expect(screen.getByText(/View & Pack Order/i)).toBeInTheDocument();
 
     // Overall KPI metrics
     expect(screen.getByText('₹15,400')).toBeInTheDocument();

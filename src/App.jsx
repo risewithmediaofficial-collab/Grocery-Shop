@@ -39,6 +39,12 @@ function PrivateRoute({ children, roles }) {
   return children;
 }
 
+function RootRedirect() {
+  const { user } = useAuth();
+  if (user?.role === 'packer') return <Navigate to="/orders" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -50,7 +56,7 @@ export default function App() {
           <Route path="/customer" element={<CustomerOrderPage />} />
           <Route path="/shop" element={<CustomerOrderPage />} />
           <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<RootRedirect />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="pos" element={<POSPage />} />
             <Route path="products" element={<ProductsPage />} />
@@ -72,7 +78,7 @@ export default function App() {
             <Route path="users" element={<PrivateRoute roles={['admin']}><UsersPage /></PrivateRoute>} />
             <Route path="audit-logs" element={<PrivateRoute roles={['admin', 'manager']}><AuditLogPage /></PrivateRoute>} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<RootRedirect />} />
           </Route>
         </Routes>
       </CartProvider>

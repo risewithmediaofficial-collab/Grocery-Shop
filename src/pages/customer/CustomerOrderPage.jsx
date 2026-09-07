@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Store, ShoppingCart, Search, Plus, Minus, CheckCircle, Package,
   Phone, MapPin, Clock, ArrowRight, Trash2, X, Sparkles, AlertCircle,
-  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck, Truck, RotateCcw
+  MessageCircle, User, LogIn, LogOut, FileText, Check, ShieldCheck, Truck, RotateCcw, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -54,23 +54,45 @@ export default function CustomerOrderPage() {
   const [showMyOrders, setShowMyOrders] = useState(false);
   const [myOrdersList, setMyOrdersList] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
-  const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'active' | 'completed'
   const [latestPreviousOrder, setLatestPreviousOrder] = useState(null);
+  const [expandedOrders, setExpandedOrders] = useState({});
+  const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'active' | 'completed'
+  const toggleOrderExpand = (id) => {
+    setExpandedOrders(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
-  // Auto-fetch customer previous order for 1-click weekly repeat
-  useEffect(() => {
-    if (customerSession?.customer?.mobile) {
-      api.get(`/customers/orders/my-orders?mobile=${customerSession.customer.mobile}&customerId=${customerSession.customer._id || ''}`)
-        .then(res => {
-          const ords = res.data.data || [];
-          setMyOrdersList(ords);
-          if (ords.length > 0) {
-            setLatestPreviousOrder(ords[0]);
-          }
-        })
-        .catch(() => {});
-    }
+  // Re-fetch customer orders (with background mode to prevent UI flickering during polling)
+  const fetchCustomerOrders = useCallback((isBackground = false) => {
+    const mobile = customerSession?.customer?.mobile;
+    const customerId = customerSession?.customer?._id;
+    if (!mobile && !customerId) return Promise.resolve();
+
+    if (!isBackground) setLoadingOrders(true);
+    return api.get(`/customers/orders/my-orders?mobile=${mobile || ''}&customerId=${customerId || ''}`)
+      .then(res => {
+        const ords = res.data.data || [];
+        setMyOrdersList(ords);
+        if (ords.length > 0) {
+          setLatestPreviousOrder(ords[0]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!isBackground) setLoadingOrders(false);
+      });
   }, [customerSession]);
+
+  // Initial fetch and auto-polling every 3.5s for real-time live order updates without refresh
+  useEffect(() => {
+    if (!customerSession?.customer?.mobile && !customerSession?.customer?._id) return;
+    fetchCustomerOrders();
+
+    const timer = setInterval(() => {
+      fetchCustomerOrders(true);
+    }, 3500);
+
+    return () => clearInterval(timer);
+  }, [fetchCustomerOrders]);
 
   const handleRepeatOrder = (order) => {
     if (!order?.items?.length) return;
@@ -463,17 +485,12 @@ export default function CustomerOrderPage() {
 
   // Fetch customer orders history
   const fetchMyOrders = async () => {
-    if (!customerSession?.customer?.mobile) return;
-    setLoadingOrders(true);
-    try {
-      const res = await api.get(`/customers/orders/my-orders?mobile=${customerSession.customer.mobile}&customerId=${customerSession.customer._id}`);
-      setMyOrdersList(res.data.data || []);
-      setShowMyOrders(true);
-    } catch (err) {
-      toast.error('Failed to load orders history');
-    } finally {
-      setLoadingOrders(false);
+    if (!customerSession?.customer) {
+      setShowLoginModal(true);
+      return;
     }
+    setShowMyOrders(true);
+    fetchCustomerOrders();
   };
 
   // Handle Order Submit
@@ -527,6 +544,10 @@ export default function CustomerOrderPage() {
 
       const createdOrder = res.data.data;
       setOrderPlaced(createdOrder);
+      if (createdOrder) {
+        setMyOrdersList(prev => [createdOrder, ...prev.filter(o => o._id !== createdOrder._id)]);
+      }
+      fetchCustomerOrders(true);
       setCustomerCart({});
       setShowMobileCart(false);
       try {
@@ -667,6 +688,16 @@ export default function CustomerOrderPage() {
                 <span className={clsx('font-bold', orderPlaced.deliveryCharge > 0 ? 'text-amber-800' : 'text-emerald-700 font-extrabold')}>
                   {orderPlaced.deliveryCharge > 0 ? `₹${orderPlaced.deliveryCharge}` : 'FREE (₹0)'}
                 </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-t border-gray-200">
+                <span className="text-gray-900 font-extrabold text-sm">Total Amount to Pay:</span>
+                <span className="font-black text-emerald-700 text-lg">
+                  ₹{Number(orderPlaced.totalAmount || orderPlaced.grandTotal || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[11px] text-gray-500">
+                <span>Payment Mode:</span>
+                <span className="font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">Pay on Delivery (Cash / UPI)</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                 <span className="text-gray-500 font-medium">Status:</span>
@@ -1268,26 +1299,49 @@ export default function CustomerOrderPage() {
                         {myOrdersList.length}
                       </span>
                     )}
-                    {activeOrdersCount > 0 && (
+                    {activeOrdersCount > 0 ? (
                       <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                         {activeOrdersCount} live
                       </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        <Check size={10} /> Up to date
+                      </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    +91 {customerSession?.customer?.mobile || '6380140927'}
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-[11px] text-slate-400">
+                      +91 {customerSession?.customer?.mobile || '6380140927'}
+                    </p>
+                    <span className="text-[10px] text-slate-300">•</span>
+                    <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500" />
+                      Live auto-updates
+                    </span>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowMyOrders(false)}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shrink-0"
-                  title="Close"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fetchCustomerOrders()}
+                    disabled={loadingOrders}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer"
+                    title="Refresh orders now"
+                  >
+                    <RefreshCw size={14} className={clsx(loadingOrders && 'animate-spin text-primary-600')} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowMyOrders(false)}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                    title="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Filter tabs */}
@@ -1375,10 +1429,18 @@ export default function CustomerOrderPage() {
                             {(ord.items || []).length} item{(ord.items || []).length !== 1 ? 's' : ''}
                           </p>
                         </div>
-                        {ord.grandTotal > 0 && (
+                        {Number(ord.totalAmount || ord.grandTotal || 0) > 0 && (
                           <div className="text-right shrink-0">
-                            <p className="text-[10px] text-slate-400 font-medium">Total</p>
-                            <p className="text-sm font-bold text-slate-900">₹{Number(ord.grandTotal).toLocaleString('en-IN')}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Total Amount</p>
+                            <p className="text-sm sm:text-base font-black text-emerald-700">
+                              ₹{Number(ord.totalAmount || ord.grandTotal || 0).toLocaleString('en-IN')}
+                            </p>
+                            <span className={clsx(
+                              'text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5',
+                              ord.paymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                            )}>
+                              {ord.paymentStatus === 'paid' ? 'Paid' : 'Pay on Delivery'}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1388,26 +1450,44 @@ export default function CustomerOrderPage() {
                         <OrderStatusTracker order={ord} />
                       </div>
 
-                      {/* Items list */}
+                      {/* Collapsible Items list - Hidden by default */}
                       {(ord.items || []).length > 0 && (
-                        <div className="border-t border-slate-100 px-4 py-3">
-                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Items</p>
-                          <div className="space-y-1.5">
-                            {(ord.items || []).map((item, i) => (
-                              <div key={i} className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                                  <p className="text-xs text-slate-700 font-medium truncate">{item.productName || 'Item'}</p>
-                                  {item.notes && (
-                                    <p className="text-[10px] text-slate-400 truncate hidden sm:block">({item.notes})</p>
-                                  )}
-                                </div>
-                                <span className="text-xs text-slate-500 shrink-0 font-medium">
-                                  × {item.quantity}{item.unit ? ` ${item.unit}` : ''}
-                                </span>
-                              </div>
-                            ))}
+                        <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50/60">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleOrderExpand(ord._id)}
+                              className="text-xs font-bold text-primary-700 hover:text-primary-800 flex items-center gap-1.5 cursor-pointer py-1.5 px-3 rounded-xl bg-white border border-slate-200 hover:border-primary-300 shadow-2xs transition-all"
+                            >
+                              <Package size={13} />
+                              <span>{expandedOrders[ord._id] ? 'Hide Items ▲' : `View ${ord.items.length} Item${ord.items.length !== 1 ? 's' : ''} ▼`}</span>
+                            </button>
+                            <span className="text-[11px] text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs text-right">
+                              {expandedOrders[ord._id]
+                                ? `${ord.items.length} total items`
+                                : ord.items.map(it => it.productName).filter(Boolean).slice(0, 2).join(', ') + (ord.items.length > 2 ? ` +${ord.items.length - 2} more` : '')}
+                            </span>
                           </div>
+
+                          {/* Expanded items list */}
+                          {expandedOrders[ord._id] && (
+                            <div className="mt-3 pt-2.5 border-t border-slate-200/80 space-y-2 animate-in fade-in duration-150">
+                              {(ord.items || []).map((item, i) => (
+                                <div key={i} className="flex items-center justify-between gap-3 text-xs bg-white p-2 rounded-lg border border-slate-100">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-primary-500 shrink-0" />
+                                    <p className="text-slate-800 font-semibold truncate">{item.productName || 'Item'}</p>
+                                    {item.notes && (
+                                      <p className="text-[10px] text-slate-400 truncate hidden sm:block">({item.notes})</p>
+                                    )}
+                                  </div>
+                                  <span className="text-slate-700 shrink-0 font-black bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                                    × {item.quantity}{item.unit ? ` ${item.unit}` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 

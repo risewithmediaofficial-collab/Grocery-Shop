@@ -240,38 +240,41 @@ export function getProductVariantConfig(product) {
   const catName = (product.category?.name || product.category || '').toLowerCase();
   const prodName = (product.name || '').toLowerCase();
 
-  // 1. Loose Commodity Staples (Sugar, Rice, Atta, Maida, Dals, Wheat, Flours, Grains)
+  // 1. Loose Commodity Staples (Sugar, Rice, Atta, Maida, Dals, Wheat, Flours, Grains, Loose Masalas)
+  const isExplicitBagProduct = prodName.includes('bag') || prodName.includes('sack') || prodName.includes('25kg') || prodName.includes('50kg');
   const isLooseCommodity =
-    catName.includes('grain') ||
-    catName.includes('staple') ||
-    catName.includes('flour') ||
-    prodName.includes('rice') ||
-    prodName.includes('sugar') ||
-    prodName.includes('atta') ||
-    prodName.includes('maida') ||
-    prodName.includes('dal') ||
-    prodName.includes('wheat') ||
-    prodName.includes('sooji') ||
-    prodName.includes('rava') ||
-    prodName.includes('flour') ||
-    (unitSymbol === 'kg' && !prodName.includes('bottle') && !prodName.includes('can'));
+    !isExplicitBagProduct && (
+      product.isLoose ||
+      prodName.includes('loose') ||
+      catName.includes('grain') ||
+      catName.includes('staple') ||
+      catName.includes('flour') ||
+      prodName.includes('rice') ||
+      prodName.includes('sugar') ||
+      prodName.includes('atta') ||
+      prodName.includes('maida') ||
+      prodName.includes('dal') ||
+      prodName.includes('wheat') ||
+      prodName.includes('sooji') ||
+      prodName.includes('rava') ||
+      prodName.includes('flour') ||
+      (unitSymbol === 'kg' && !prodName.includes('bottle') && !prodName.includes('can') && !prodName.includes('pack'))
+    );
 
   if (isLooseCommodity) {
-    const bag25DiscountRate = Math.max(1, Math.round(baseRate > 50 ? baseRate - 1 : baseRate * 0.98));
-    const bag50DiscountRate = Math.max(1, Math.round(baseRate > 50 ? baseRate - 2 : baseRate * 0.96));
-
-    const bagOptions = [
-      { id: 'bag_25', label: '25 kg Bag', size: 25, price: 25 * bag25DiscountRate, ratePerKg: bag25DiscountRate },
-      { id: 'bag_10', label: '10 kg Bag', size: 10, price: 10 * baseRate, ratePerKg: baseRate },
-      { id: 'bag_50', label: '50 kg Bag', size: 50, price: 50 * bag50DiscountRate, ratePerKg: bag50DiscountRate },
-    ];
+    // ONLY show whole bag options if explicitly configured on the product in inventory.
+    // If it's pure loose stock (like Toor Dal 60 kg), do NOT generate synthetic wholesale bags!
+    const configuredBags = Array.isArray(product.bagOptions) && product.bagOptions.length > 0
+      ? product.bagOptions
+      : [];
 
     return {
       type: 'commodity_loose',
-      primaryUnit: 'kg',
+      primaryUnit: unitSymbol || 'kg',
       baseRate,
-      bagOptions,
-      defaultBagOption: bagOptions[0],
+      currentStock: Number(product.currentStock || 0),
+      bagOptions: configuredBags,
+      defaultBagOption: configuredBags[0] || null,
     };
   }
 
@@ -338,12 +341,28 @@ export function getProductVariantConfig(product) {
     prodName.includes('pouch');
 
   if (isMasalaOrPowder) {
+    const hasFixedPack = /\b(50g|100g|200g|250g|500g|1kg)\b/i.test(prodName);
+    if (hasFixedPack) {
+      const match = prodName.match(/\b(50g|100g|200g|250g|500g|1kg)\b/i);
+      const sizeLabel = match ? match[0] : 'Packet';
+      return {
+        type: 'packaged_general',
+        primaryUnit: 'packet',
+        baseRate,
+        packetSize: sizeLabel,
+        brand: product.brand?.name || product.brand || '',
+        currentStock: Number(product.currentStock || 0),
+        options: [{ id: 'packet', label: `${sizeLabel} Packet`, unitDescription: 'Packet', price: baseRate }],
+        selectedOption: { id: 'packet', label: `${sizeLabel} Packet`, unitDescription: 'Packet', price: baseRate }
+      };
+    }
+
     const masalaOptions = [
-      { id: '50g', label: '50g', unitDescription: 'Packet', price: Math.max(10, Math.round(baseRate * 0.55)) },
-      { id: '100g', label: '100g', unitDescription: 'Packet', price: baseRate || 30 },
-      { id: '250g', label: '250g', unitDescription: 'Packet', price: Math.max(25, Math.round(baseRate * 2.35)) },
-      { id: '500g', label: '500g', unitDescription: 'Pack', price: Math.max(45, Math.round(baseRate * 4.6)) },
-      { id: '1kg', label: '1 kg', unitDescription: 'Pack', price: Math.max(80, Math.round(baseRate * 9.0)) },
+      { id: '50g', label: '50g', unitDescription: 'Packet / Loose', price: Math.max(10, Math.round(baseRate * 0.55)) },
+      { id: '100g', label: '100g', unitDescription: 'Packet / Loose', price: baseRate || 30 },
+      { id: '250g', label: '250g', unitDescription: 'Packet / Loose', price: Math.max(25, Math.round(baseRate * 2.35)) },
+      { id: '500g', label: '500g', unitDescription: 'Pack / Loose', price: Math.max(45, Math.round(baseRate * 4.6)) },
+      { id: '1kg', label: '1 kg', unitDescription: 'Pack / Loose', price: Math.max(80, Math.round(baseRate * 9.0)) },
     ];
 
     const defaultOpt = masalaOptions.find(o => prodName.includes(o.id.toLowerCase()) || prodName.includes(o.label.toLowerCase())) || masalaOptions[1] || masalaOptions[0];
@@ -352,6 +371,8 @@ export function getProductVariantConfig(product) {
       type: 'packaged_masala',
       options: masalaOptions,
       selectedOption: defaultOpt,
+      brand: product.brand?.name || product.brand || '',
+      currentStock: Number(product.currentStock || 0),
     };
   }
 

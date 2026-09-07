@@ -15,9 +15,13 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      const loggedUser = await login(form.email, form.password);
       toast.success('Welcome back!');
-      navigate('/dashboard');
+      if (loggedUser?.role === 'packer') {
+        navigate('/orders');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
@@ -93,19 +97,22 @@ export default function LoginPage() {
           {/* Quick login hints */}
           <div className="mt-6 pt-5 border-t border-gray-100">
             <p className="text-xs text-gray-500 mb-2 font-medium">Demo Accounts:</p>
-            {[
-              { role: 'Admin', email: 'admin@columbu.com', password: 'admin123' },
-              { role: 'Cashier', email: 'cashier@columbu.com', password: 'cashier123' },
-            ].map(acc => (
-              <button
-                key={acc.role}
-                type="button"
-                onClick={() => setForm({ email: acc.email, password: acc.password })}
-                className="text-xs text-primary-600 hover:text-primary-700 mr-4 font-medium"
-              >
-                {acc.role} →
-              </button>
-            ))}
+            <div className="flex flex-wrap gap-y-2">
+              {[
+                { role: 'Admin', email: 'admin@columbu.com', password: 'admin123' },
+                { role: 'Cashier', email: 'cashier@columbu.com', password: 'cashier123' },
+                { role: 'Packer Staff', email: 'packer@columbu.com', password: 'packer123' },
+              ].map(acc => (
+                <button
+                  key={acc.role}
+                  type="button"
+                  onClick={() => setForm({ email: acc.email, password: acc.password })}
+                  className="text-xs text-primary-600 hover:text-primary-700 mr-4 font-medium cursor-pointer"
+                >
+                  {acc.role} →
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

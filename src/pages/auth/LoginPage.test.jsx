@@ -33,7 +33,7 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument();
   });
 
-  it('populates demo credentials on clicking demo account shortcuts', () => {
+  it('populates demo credentials on clicking demo account shortcuts including Packer Staff', () => {
     render(
       <MemoryRouter>
         <AuthProvider>
@@ -47,6 +47,10 @@ describe('LoginPage', () => {
 
     const emailInput = screen.getByPlaceholderText('admin@columbu.com');
     expect(emailInput.value).toBe('cashier@columbu.com');
+
+    const packerShortcut = screen.getByText('Packer Staff →');
+    fireEvent.click(packerShortcut);
+    expect(emailInput.value).toBe('packer@columbu.com');
   });
 
   it('submits login form and calls auth endpoint', async () => {

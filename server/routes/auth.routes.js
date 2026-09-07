@@ -18,9 +18,21 @@ router.post('/login', async (req, res) => {
       ? email.replace('kolambu.com', 'columbu.com')
       : email.replace('columbu.com', 'kolambu.com');
 
-    const user = await User.findOne({
+    let user = await User.findOne({
       $or: [{ email }, { email: altEmail }]
     });
+
+    // Auto-create demo packer staff if logging in with default credentials
+    if (!user && (email === 'packer@columbu.com' || altEmail === 'packer@columbu.com') && password === 'packer123') {
+      user = await User.create({
+        name: 'Packer Staff',
+        email: 'packer@columbu.com',
+        password: 'packer123',
+        role: 'packer',
+        mobile: '9000000003',
+        isActive: true
+      });
+    }
 
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, message: 'Invalid email or password. Use admin@columbu.com / admin123' });
@@ -31,8 +43,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password. Use admin@columbu.com / admin123' });
     }
 
-    user.lastLogin = new Date();
-    await user.save();
+    // Update lastLogin without triggering full document validation
+    await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } }).catch(() => {});
 
     await auditService.log({
       user,

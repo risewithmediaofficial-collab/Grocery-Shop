@@ -12,68 +12,10 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────
-  #  1. Build & Push Docker Images (Test build + optional registry backup)
-  # ─────────────────────────────────────────────
-  build:
-    name: 🐳 Build & Push Docker Images
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Check Docker Hub Secrets
-        id: docker_auth
-        env:
-          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
-        run: |
-          if [ -n "$DOCKER_USER" ] && [ -n "$DOCKER_PASS" ]; then
-            echo "has_auth=true" >> "$GITHUB_OUTPUT"
-            echo "repo=$DOCKER_USER" >> "$GITHUB_OUTPUT"
-            echo "✅ Docker credentials detected."
-          else
-            echo "has_auth=false" >> "$GITHUB_OUTPUT"
-            echo "repo=grocery" >> "$GITHUB_OUTPUT"
-            echo "::warning::DOCKER_USERNAME and DOCKER_PASSWORD not set. Images build for test verification."
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        if: steps.docker_auth.outputs.has_auth == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.backend
-          push: ${{ steps.docker_auth.outputs.has_auth == 'true' }}
-          tags: ${{ steps.docker_auth.outputs.repo }}/grocery-backend:latest
-          no-cache: true
-
-      - name: Build & Push Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.frontend
-          build-args: |
-            VITE_API_URL=/api
-          push: ${{ steps.docker_auth.outputs.has_auth == 'true' }}
-          tags: ${{ steps.docker_auth.outputs.repo }}/grocery-frontend:latest
-          no-cache: true
-
-  # ─────────────────────────────────────────────
-  #  2. Deploy to VPS via SSH
+  #  Fast Direct VPS Deploy (Single Job)
   # ─────────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy to Server
-    needs: [build]
+    name: 🚀 Fast Deploy to Server
     runs-on: ubuntu-latest
 
     steps:

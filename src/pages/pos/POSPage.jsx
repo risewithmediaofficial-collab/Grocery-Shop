@@ -39,14 +39,39 @@ function CustomerSelector({ onSelect, onClose }) {
     doSearch(search);
   }, [search, doSearch]);
 
-  const handleQuickCustomer = (e) => {
-    e.preventDefault();
-    if (!quickName.trim() && !quickMobile.trim()) {
+  const handleQuickCustomer = async (e) => {
+    e?.preventDefault();
+    const name = quickName.trim();
+    const mobile = quickMobile.trim();
+    if (!name && !mobile) {
       return toast.error('Please enter a name or mobile number');
     }
+
+    if (name && mobile) {
+      try {
+        const res = await api.post('/customers', { name, mobile });
+        if (res.data?.data) {
+          toast.success(`Registered customer ${name}`);
+          onSelect(res.data.data);
+          return;
+        }
+      } catch (err) {
+        // If mobile already exists or error, try to fetch existing customer with this mobile
+        try {
+          const searchRes = await api.get(`/customers/search?q=${encodeURIComponent(mobile)}`);
+          const existing = searchRes.data?.data?.[0];
+          if (existing) {
+            toast.success(`Linked to existing customer: ${existing.name}`);
+            onSelect(existing);
+            return;
+          }
+        } catch {}
+      }
+    }
+
     onSelect({
-      name: quickName.trim() || 'Walk-in Customer',
-      mobile: quickMobile.trim() || '',
+      name: name || 'Walk-in Customer',
+      mobile: mobile || '',
       isQuick: true,
     });
   };
@@ -69,7 +94,7 @@ function CustomerSelector({ onSelect, onClose }) {
             <input
               ref={inputRef}
               className="form-input text-sm flex-1 rounded-xl"
-              placeholder="Search by name, mobile, or ID..."
+              placeholder="Search by name, mobile, ID, or bill # (e.g. KS-000008)..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -133,18 +158,49 @@ function CustomerSelector({ onSelect, onClose }) {
 
         <div className="max-h-60 overflow-y-auto px-4 pb-4 space-y-2">
           {results.length === 0 && search.trim().length >= 1 && (
-            <p className="text-center text-gray-400 text-sm py-4">No registered customers found</p>
+            <div className="p-3 bg-gray-50 border border-dashed border-gray-200 rounded-2xl text-center space-y-1.5 my-2">
+              <p className="text-gray-500 text-xs">No registered customer found for "{search}"</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const isNum = /^\d+$/.test(search.trim());
+                  if (isNum) {
+                    setQuickMobile(search.trim());
+                    if (!quickName) setQuickName('');
+                  } else {
+                    setQuickName(search.trim());
+                  }
+                  setShowQuickForm(true);
+                }}
+                className="btn-primary btn-sm text-xs font-bold py-1 px-3 rounded-xl mx-auto flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={13} /> Quick Add / Tag "{search}"
+              </button>
+            </div>
           )}
           {results.map(c => (
             <div key={c._id} onClick={() => onSelect(c)} className="p-3 border border-gray-200 rounded-2xl cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-bold text-sm text-gray-900">{c.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-sm text-gray-900">{c.name}</p>
+                    {c.fromInvoice && (
+                      <span className="bg-primary-100 text-primary-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-primary-200">
+                        Bill: {c.fromInvoice}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <Phone size={11} className="text-gray-400 shrink-0" />
-                    <span>{c.mobile} · {c.customerId}</span>
+                    {c.mobile ? (
+                      <>
+                        <Phone size={11} className="text-gray-400 shrink-0" />
+                        <span>{c.mobile} {c.customerId ? `· ${c.customerId}` : ''}</span>
+                      </>
+                    ) : (
+                      <span>{c.customerId ? `ID: ${c.customerId}` : 'Customer profile'}</span>
+                    )}
                   </p>
-                  {c.lastPurchaseAmount > 0 && <p className="text-xs text-gray-400">Last: {fmt(c.lastPurchaseAmount)}</p>}
+                  {c.lastPurchaseAmount > 0 && <p className="text-xs text-gray-400">Last Purchase: {fmt(c.lastPurchaseAmount)}</p>}
                 </div>
                 {c.outstandingBalance > 0 && (
                   <span className="badge-red text-xs">{fmt(c.outstandingBalance)} due</span>
@@ -398,13 +454,24 @@ function RepeatPurchasePromptModal({ currentCart, targetCustomer, onHoldAndLoad,
 function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, onSave, onSaveAndPrint, onClose }) {
   const [method, setMethod] = useState('cash');
   const [cash, setCash] = useState(grandTotal.toString());
-  const [upi, setUpi] = useState('0');
+  const [upi, setUpi] = useState(grandTotal.toString());
+  const [packers, setPackers] = useState([]);
+  const [selectedPackerId, setSelectedPackerId] = useState('');
+  const [modalCustName, setModalCustName] = useState(customer?.name || '');
+  const [modalCustMobile, setModalCustMobile] = useState(customer?.mobile || '');
+  const [upiRef, setUpiRef] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    api.get('/users/packers')
+      .then(res => setPackers(res.data.data || []))
+      .catch(() => {});
+  }, []);
+
   const cashAmt = parseFloat(cash) || 0;
   const upiAmt = parseFloat(upi) || 0;
-  const paid = method === 'mixed' ? cashAmt + upiAmt : method === 'cash' ? cashAmt : grandTotal;
+  const paid = method === 'mixed' ? cashAmt + upiAmt : method === 'cash' ? cashAmt : method === 'upi' ? upiAmt : grandTotal;
   const change = paid - grandTotal;
 
   const METHODS = [
@@ -432,8 +499,8 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
   };
 
   const validate = () => {
-    if (method === 'credit' && !customer) {
-      toast.error('Please select a customer for credit sales');
+    if (method === 'credit' && !customer && !modalCustName.trim() && !modalCustMobile.trim()) {
+      toast.error('Please select or enter customer info for credit sales');
       return false;
     }
     return true;
@@ -442,13 +509,27 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
   const handleComplete = () => {
     if (!validate()) return;
     setLoading(true);
-    onSave({ method, cashAmt, upiAmt, paid, change, notes });
+    const selectedPacker = packers.find(p => p._id === selectedPackerId);
+    onSave({
+      method, cashAmt, upiAmt, paid, change, notes, upiRef,
+      assignedPackerId: selectedPackerId || undefined,
+      assignedPackerName: selectedPacker?.name || undefined,
+      customerName: modalCustName.trim() || undefined,
+      customerMobile: modalCustMobile.trim() || undefined,
+    });
   };
 
   const handleCompleteAndPrint = () => {
     if (!validate()) return;
     setLoading(true);
-    onSaveAndPrint({ method, cashAmt, upiAmt, paid, change, notes });
+    const selectedPacker = packers.find(p => p._id === selectedPackerId);
+    onSaveAndPrint({
+      method, cashAmt, upiAmt, paid, change, notes, upiRef,
+      assignedPackerId: selectedPackerId || undefined,
+      assignedPackerName: selectedPacker?.name || undefined,
+      customerName: modalCustName.trim() || undefined,
+      customerMobile: modalCustMobile.trim() || undefined,
+    });
   };
 
   return (
@@ -472,7 +553,32 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
               <X size={18} />
             </button>
           </div>
-          {customer && <p className="text-xs text-primary-200 mt-1">Customer: {customer.name} ({customer.mobile})</p>}
+          {customer ? (
+            <p className="text-xs text-primary-200 mt-1">Customer: <strong className="text-white font-bold">{customer.name}</strong> {customer.mobile ? `(${customer.mobile})` : ''}</p>
+          ) : (
+            <div className="mt-2.5 pt-2 border-t border-white/20">
+              <div className="flex items-center gap-1.5 mb-1 text-[11px] text-primary-200 font-semibold">
+                <User size={12} />
+                <span>Customer Details (Optional):</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Customer Name"
+                  value={modalCustName}
+                  onChange={e => setModalCustName(e.target.value)}
+                  className="bg-white/15 border border-white/25 placeholder:text-primary-200/70 text-white text-xs rounded-xl px-2.5 py-1.5 outline-none focus:bg-white/25 focus:ring-1 focus:ring-white/40"
+                />
+                <input
+                  type="tel"
+                  placeholder="Mobile Number"
+                  value={modalCustMobile}
+                  onChange={e => setModalCustMobile(e.target.value)}
+                  className="bg-white/15 border border-white/25 placeholder:text-primary-200/70 text-white text-xs rounded-xl px-2.5 py-1.5 outline-none focus:bg-white/25 focus:ring-1 focus:ring-white/40"
+                />
+              </div>
+            </div>
+          )}
           {totalSavings > 0 && (
             <p className="text-xs text-emerald-200 mt-1 font-semibold flex items-center gap-1.5">
               <Tag size={12} />
@@ -484,14 +590,23 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
         <div className="p-5 space-y-4">
           {/* Payment Method */}
           <div>
-            <label className="form-label">Payment Method</label>
-            <div className="grid grid-cols-5 gap-1.5 mt-1">
+            <label className="form-label text-xs font-bold text-gray-700">Payment Method</label>
+            <div className="grid grid-cols-5 gap-1.5 mt-1.5">
               {METHODS.map(m => {
                 const IconComp = m.icon;
                 return (
-                  <button key={m.value} type="button" onClick={() => setMethod(m.value)}
-                    className={clsx('text-xs py-2 px-1 rounded-lg border font-medium transition-all flex flex-col items-center justify-center gap-1', method === m.value ? 'bg-primary-50 border-primary-400 text-primary-700 font-bold shadow-2xs' : 'border-gray-200 text-gray-600 hover:border-gray-300')}>
-                    <IconComp size={14} />
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setMethod(m.value)}
+                    className={clsx(
+                      'h-14 text-xs rounded-xl border font-semibold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer',
+                      method === m.value
+                        ? 'bg-primary-50 border-primary-400 text-primary-700 font-bold shadow-2xs ring-1 ring-primary-400'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50/60'
+                    )}
+                  >
+                    <IconComp size={16} />
                     <span>{m.label}</span>
                   </button>
                 );
@@ -499,91 +614,189 @@ function PaymentModal({ grandTotal, totalSavings, savingsPercentage, customer, o
             </div>
           </div>
 
-          {method === 'cash' && (
-            <div className="space-y-2">
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
-                <input
-                  className="form-input pl-8 text-xl font-black text-gray-900 tracking-wide rounded-xl focus:ring-2 focus:ring-primary-500"
-                  type="number"
-                  value={cash}
-                  onChange={e => setCash(e.target.value)}
-                  placeholder="0"
-                  autoFocus
-                />
-              </div>
-
-              {/* Prominent Change Return Indicator */}
-              {change > 0 && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between animate-celebrate shadow-2xs">
-                  <div className="flex items-center gap-2 text-emerald-900">
-                    <RotateCcw size={16} className="text-emerald-600" />
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Return Change to Customer</p>
-                      <p className="text-xs text-emerald-600 font-medium">Hand over cash balance</p>
-                    </div>
-                  </div>
-                  <span className="text-2xl font-black text-emerald-700">{fmt(change)}</span>
+          {/* Payment Method Details Container with Uniform Same Height */}
+          <div className="min-h-[145px] flex flex-col justify-center">
+            {method === 'cash' && (
+              <div className="space-y-2">
+                <label className="form-label text-xs font-bold text-gray-700">Cash Received from Customer (₹)</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
+                  <input
+                    className="form-input pl-8 text-xl font-black text-gray-900 tracking-wide rounded-xl focus:ring-2 focus:ring-primary-500"
+                    type="number"
+                    value={cash}
+                    onChange={e => setCash(e.target.value)}
+                    placeholder="0"
+                    autoFocus
+                  />
                 </div>
-              )}
-              {change < 0 && (
-                <p className="text-xs font-semibold text-rose-500 flex items-center gap-1 mt-1">
-                  <AlertCircle size={13} /> Still needs {fmt(Math.abs(change))} to complete payment
-                </p>
-              )}
-            </div>
-          )}
 
-          {method === 'mixed' && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+                {/* Prominent Change Return Indicator */}
+                {change > 0 && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between animate-celebrate shadow-2xs">
+                    <div className="flex items-center gap-2 text-emerald-900">
+                      <RotateCcw size={15} className="text-emerald-600" />
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Return Change to Customer</p>
+                        <p className="text-xs text-emerald-600 font-medium">Hand over cash balance</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-emerald-700">{fmt(change)}</span>
+                  </div>
+                )}
+                {change < 0 && (
+                  <p className="text-xs font-semibold text-rose-500 flex items-center gap-1 mt-0.5">
+                    <AlertCircle size={13} /> Still needs {fmt(Math.abs(change))} to complete payment
+                  </p>
+                )}
+              </div>
+            )}
+
+            {method === 'upi' && (
+              <div className="space-y-2.5">
                 <div>
-                  <label className="form-label">Cash (₹)</label>
+                  <label className="form-label text-xs font-bold text-gray-700">Amount Received via UPI (₹)</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
                     <input
-                      className="form-input pl-7 text-lg font-bold"
+                      className="form-input pl-8 text-xl font-black text-gray-900 tracking-wide rounded-xl focus:ring-2 focus:ring-primary-500"
                       type="number"
-                      value={cash}
-                      onChange={e => handleCashChange(e.target.value)}
+                      value={upi}
+                      onChange={e => setUpi(e.target.value)}
+                      placeholder="0"
                       autoFocus
                     />
                   </div>
+                  {upiAmt < grandTotal && (
+                    <p className="text-xs font-semibold text-rose-500 flex items-center gap-1 mt-1">
+                      <AlertCircle size={13} /> Less than total by {fmt(grandTotal - upiAmt)}
+                    </p>
+                  )}
+                  {upiAmt > grandTotal && (
+                    <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1 mt-1">
+                      <Check size={13} /> Excess received: {fmt(upiAmt - grandTotal)}
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <label className="form-label">UPI (₹)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
-                    <input
-                      className="form-input pl-7 text-lg font-bold"
-                      type="number"
-                      value={upi}
-                      onChange={e => handleUpiChange(e.target.value)}
-                    />
+
+                <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
+                    <QrCode size={16} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-blue-950">Shop Scanner / Counter QR Code</p>
+                    <p className="text-[11px] text-blue-700">Verify customer transfer on the counter QR</p>
                   </div>
                 </div>
+
+                <div>
+                  <label className="form-label text-xs font-bold text-gray-700">UPI Ref / Transaction ID (Optional)</label>
+                  <input
+                    type="text"
+                    className="form-input text-xs rounded-xl"
+                    placeholder="GPay / PhonePe reference / UTR number (Optional)"
+                    value={upiRef}
+                    onChange={e => setUpiRef(e.target.value)}
+                  />
+                </div>
               </div>
-              {paid < grandTotal && (
-                <p className="text-xs font-semibold text-rose-500 flex items-center gap-1">
-                  <AlertCircle size={13} /> Still due: {fmt(Math.abs(change))}
+            )}
+
+            {method === 'card' && (
+              <div className="p-4 bg-purple-50/80 border border-purple-200 rounded-xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
+                  <CreditCard size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-purple-950">Card Terminal / POS Machine</p>
+                  <p className="text-xs text-purple-700 mt-0.5">
+                    Swipe or tap card on machine for <strong className="font-extrabold text-purple-950">{fmt(grandTotal)}</strong>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {method === 'credit' && (
+              <div className="p-3.5 bg-orange-50 border border-orange-200 rounded-xl text-xs text-orange-800 flex items-start gap-2.5">
+                <AlertCircle size={18} className="text-orange-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">This will add {fmt(grandTotal)} to customer's outstanding balance.</p>
+                  {customer?.outstandingBalance > 0 && (
+                    <p className="mt-1 font-semibold text-orange-900">Current balance: {fmt(customer.outstandingBalance)}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {method === 'mixed' && (
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="form-label text-xs font-bold text-gray-700">Cash (₹)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
+                      <input
+                        className="form-input pl-7 text-lg font-bold rounded-xl"
+                        type="number"
+                        value={cash}
+                        onChange={e => handleCashChange(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label text-xs font-bold text-gray-700">UPI (₹)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">₹</span>
+                      <input
+                        className="form-input pl-7 text-lg font-bold rounded-xl"
+                        type="number"
+                        value={upi}
+                        onChange={e => handleUpiChange(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {paid < grandTotal && (
+                  <p className="text-xs font-semibold text-rose-500 flex items-center gap-1">
+                    <AlertCircle size={13} /> Still due: {fmt(Math.abs(change))}
+                  </p>
+                )}
+                {paid > grandTotal && (
+                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                    <Check size={13} /> Excess: {fmt(change)}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Assign to Packer for Packing */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <Package size={14} className="text-primary-600" />
+                  <span>Assign to Packer for packing</span>
+                </label>
+                <span className="text-[10px] text-gray-400 font-medium">Optional</span>
+              </div>
+              <select
+                className="form-select text-xs font-semibold w-full bg-white rounded-lg border-gray-300"
+                value={selectedPackerId}
+                onChange={e => setSelectedPackerId(e.target.value)}
+              >
+                <option value="">None (Cashier packs directly)</option>
+                {packers.map(p => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.role.toUpperCase()})
+                  </option>
+                ))}
+              </select>
+              {selectedPackerId && (
+                <p className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 mt-0.5">
+                  <Check size={12} /> Assigned to {packers.find(p => p._id === selectedPackerId)?.name} for packing
                 </p>
               )}
             </div>
-          )}
-
-          {method === 'credit' && (
-            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 flex items-start gap-2">
-              <AlertCircle size={16} className="text-orange-600 shrink-0 mt-0.5" />
-              <div>
-                <p>This will add {fmt(grandTotal)} to customer's outstanding balance.</p>
-                {customer?.outstandingBalance > 0 && <p className="mt-1 font-semibold">Current balance: {fmt(customer.outstandingBalance)}</p>}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="form-label">Notes (optional)</label>
-            <input className="form-input" placeholder="Add note..." value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
         </div>
 
@@ -667,21 +880,17 @@ export default function POSPage() {
       (unitSymbol === 'kg' && !prodName.includes('bottle') && !prodName.includes('can'));
 
     if (isLooseCommodity) {
-      const bag25DiscountRate = Math.max(1, Math.round(baseRate > 50 ? baseRate - 1 : baseRate * 0.98));
-      const bag50DiscountRate = Math.max(1, Math.round(baseRate > 50 ? baseRate - 2 : baseRate * 0.96));
-
-      const bagOptions = [
-        { id: 'bag_25', label: '25 kg Bag', size: 25, price: 25 * bag25DiscountRate, ratePerKg: bag25DiscountRate },
-        { id: 'bag_10', label: '10 kg Bag', size: 10, price: 10 * baseRate, ratePerKg: baseRate },
-        { id: 'bag_50', label: '50 kg Bag', size: 50, price: 50 * bag50DiscountRate, ratePerKg: bag50DiscountRate },
-      ];
+      const configuredBags = Array.isArray(product.bagOptions) && product.bagOptions.length > 0
+        ? product.bagOptions
+        : [];
 
       return {
         type: 'commodity_loose',
-        primaryUnit: 'kg',
+        primaryUnit: unitSymbol || 'kg',
         baseRate,
-        bagOptions,
-        defaultBagOption: bagOptions[0],
+        currentStock: Number(product.currentStock || 0),
+        bagOptions: configuredBags,
+        defaultBagOption: configuredBags[0] || null,
       };
     }
 
@@ -838,6 +1047,7 @@ export default function POSPage() {
     const config = getProductVariantConfig(product);
 
     setHighlightedItemId(pId);
+    setSearchQuery(''); // clear search so user can type next product immediately
 
     if (config.type === 'commodity_loose') {
       setQuantityModal({
@@ -934,7 +1144,7 @@ export default function POSPage() {
     }
   };
 
-  const completeSale = async ({ method, cashAmt, upiAmt, paid, _change, notes }, printAfter = false) => {
+  const completeSale = async ({ method, cashAmt, upiAmt, paid, _change, notes, upiRef, assignedPackerId, assignedPackerName, customerName: optCustName, customerMobile: optCustMobile }, printAfter = false) => {
     try {
       const items = cart.cartItems.map(item => {
         const baseProductId = item.productId || (typeof item._id === 'string' && item._id.includes('_') ? item._id.split('_')[0] : item._id);
@@ -951,17 +1161,28 @@ export default function POSPage() {
       });
 
       const paymentDetails = method === 'mixed'
-        ? [{ method: 'cash', amount: cashAmt }, { method: 'upi', amount: upiAmt }]
+        ? [{ method: 'cash', amount: cashAmt }, { method: 'upi', amount: upiAmt, reference: upiRef || '' }]
+        : method === 'upi'
+        ? [{ method: 'upi', amount: paid, reference: upiRef || '' }]
         : [{ method, amount: paid }];
+
+      const finalNotes = [notes, upiRef ? `UPI Ref: ${upiRef}` : ''].filter(Boolean).join(' | ');
+
+      const finalCustomerName = optCustName || cart.customer?.name || undefined;
+      const finalCustomerMobile = optCustMobile || cart.customer?.mobile || undefined;
 
       const res = await api.post('/sales', {
         customerId: cart.customer?._id,
+        customerName: finalCustomerName,
+        customerMobile: finalCustomerMobile,
         items,
         discount: cart.billDiscount || cart.discount,
         paymentMethod: method,
         paymentDetails,
         amountPaid: paid,
-        notes,
+        notes: finalNotes,
+        assignedPackerId,
+        assignedPackerName,
       });
 
       const savedSale = res.data.data;
@@ -970,7 +1191,11 @@ export default function POSPage() {
       setShowPayment(false);
       setShowMobileCart(false);
       playSuccessChime();
-      toast.success(`Bill saved! Invoice: ${savedSale.invoiceNumber}`);
+      if (assignedPackerName) {
+        toast.success(`Bill ${savedSale.invoiceNumber} saved & assigned to ${assignedPackerName} for packing!`);
+      } else {
+        toast.success(`Bill saved! Invoice: ${savedSale.invoiceNumber}`);
+      }
 
       if (printAfter) {
         // Directly print receipt via hidden iframe without navigating away from POS screen
@@ -1737,6 +1962,7 @@ export default function POSPage() {
               setHighlightedItemId(bagKey);
             }
             setQuantityModal(null);
+            setTimeout(() => searchRef.current?.focus(), 50);
           };
 
           return (
@@ -1786,35 +2012,37 @@ export default function POSPage() {
                     </div>
                   )}
 
-                  {/* Mode Switcher: Active mode is active, the other is blocked/hidden */}
-                  <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100/90 rounded-2xl border border-gray-200/80">
-                    <button
-                      type="button"
-                      onClick={() => setQuantityModal(prev => ({ ...prev, mode: 'kg' }))}
-                      className={clsx(
-                        'py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer',
-                        mode === 'kg'
-                          ? 'bg-primary-600 text-white shadow-xs scale-101'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                      )}
-                    >
-                      <Scale size={14} />
-                      <span>Loose by Weight (kg)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuantityModal(prev => ({ ...prev, mode: 'bag' }))}
-                      className={clsx(
-                        'py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer',
-                        mode === 'bag'
-                          ? 'bg-emerald-600 text-white shadow-xs scale-101'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                      )}
-                    >
-                      <Package size={14} />
-                      <span>Whole Bags</span>
-                    </button>
-                  </div>
+                  {/* Mode Switcher: Only show if Whole Bags are configured in inventory */}
+                  {config.bagOptions && config.bagOptions.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100/90 rounded-2xl border border-gray-200/80">
+                      <button
+                        type="button"
+                        onClick={() => setQuantityModal(prev => ({ ...prev, mode: 'kg' }))}
+                        className={clsx(
+                          'py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+                          mode === 'kg'
+                            ? 'bg-primary-600 text-white shadow-xs scale-101'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                        )}
+                      >
+                        <Scale size={14} />
+                        <span>Loose by Weight ({product.unit?.symbol || 'kg'})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuantityModal(prev => ({ ...prev, mode: 'bag' }))}
+                        className={clsx(
+                          'py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+                          mode === 'bag'
+                            ? 'bg-emerald-600 text-white shadow-xs scale-101'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                        )}
+                      >
+                        <Package size={14} />
+                        <span>Whole Bags</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Conditional Active Section */}
                   {mode === 'kg' ? (
@@ -2045,6 +2273,7 @@ export default function POSPage() {
           }
           setHighlightedItemId(itemKey);
           setQuantityModal(null);
+          setTimeout(() => searchRef.current?.focus(), 50);
         };
 
         const sizeLabelText = config.type === 'packaged_liquid'

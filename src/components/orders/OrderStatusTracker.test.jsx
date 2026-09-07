@@ -55,7 +55,7 @@ describe('OrderStatusTracker Component', () => {
     expect(screen.getByText(/Order #ORD-00003 Verified/i)).toBeInTheDocument();
   });
 
-  it('renders delivered celebration with doorstep badge', () => {
+  it('renders delivered celebration with doorstep badge and 100% full completion', () => {
     const order = {
       _id: 'ord-4',
       orderNumber: 'ORD-00001',
@@ -68,5 +68,26 @@ describe('OrderStatusTracker Component', () => {
     expect(screen.getByText(/Delivered Successfully/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Indiranagar/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Arrived at destination/i)).toBeInTheDocument();
+    expect(screen.getByText(/Delivered at Doorstep/i)).toBeInTheDocument();
+  });
+
+  it('stops in 75-80% range and displays arriving soon when delivery is taking longer / late, without rewinding', () => {
+    // Order dispatched 25 minutes ago
+    const pastDate = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+    const order = {
+      _id: 'ord-5',
+      orderNumber: 'ORD-00008',
+      status: 'out_for_delivery',
+      deliveryAddress: 'Koramangala',
+      statusLogs: [
+        { status: 'out_for_delivery', changedAt: pastDate }
+      ]
+    };
+
+    render(<OrderStatusTracker order={order} />);
+
+    // Shows arriving soon near destination and stops in the 75-80% bracket
+    expect(screen.getByText(/Arriving Soon • Near Destination/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rider near destination/i)).toBeInTheDocument();
   });
 });

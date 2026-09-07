@@ -34,8 +34,11 @@ describe('SalesReturnsPage Component & Process Buttons', () => {
   });
 
   it('searches for invoice and loads return items for refund processing', async () => {
-    api.get.mockResolvedValueOnce({
-      data: { data: dummySale },
+    api.get.mockImplementation((url) => {
+      if (url.includes('/invoices/')) {
+        return Promise.resolve({ data: { data: dummySale } });
+      }
+      return Promise.resolve({ data: { data: [] } });
     });
 
     render(
@@ -54,5 +57,41 @@ describe('SalesReturnsPage Component & Process Buttons', () => {
 
     expect(screen.getByText('Toor Dal 1kg')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Confirm & Process Return/i })).toBeInTheDocument();
+  });
+
+  it('switches to exchange mode and allows replacement product selection', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/invoices/')) {
+        return Promise.resolve({ data: { data: dummySale } });
+      }
+      return Promise.resolve({
+        data: {
+          data: [
+            { _id: 'p2', name: 'Moong Dal 1kg', sellingPrice: 150, currentStock: 10, unit: 'kg' }
+          ]
+        }
+      });
+    });
+
+    render(
+      <MemoryRouter>
+        <SalesReturnsPage />
+      </MemoryRouter>
+    );
+
+    const input = screen.getByPlaceholderText(/Enter Invoice Number/i);
+    fireEvent.change(input, { target: { value: 'INV-000101' } });
+    const findBtn = screen.getByRole('button', { name: /Find Invoice/i });
+    await act(async () => {
+      fireEvent.click(findBtn);
+    });
+
+    // Switch to exchange mode
+    const exchangeTab = screen.getByRole('button', { name: /Product Replacement \/ Exchange/i });
+    await act(async () => {
+      fireEvent.click(exchangeTab);
+    });
+
+    expect(screen.getByText(/Step 2: Choose Replacement Products for Customer/i)).toBeInTheDocument();
   });
 });

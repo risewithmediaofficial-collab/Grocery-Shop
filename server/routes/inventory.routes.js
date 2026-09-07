@@ -43,7 +43,7 @@ router.get('/adjustments', protect, async (req, res) => {
 });
 
 // POST /api/inventory/adjust — stock adjustment
-router.post('/adjust', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
+router.post('/adjust', protect, authorize('admin', 'manager', 'cashier', 'packer'), async (req, res) => {
   try {
     const { productId, adjustedQty, reason, type, notes } = req.body;
     const product = await Product.findById(productId);

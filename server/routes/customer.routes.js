@@ -150,14 +150,60 @@ router.get('/search', protect, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || !q.trim()) return res.json({ success: true, data: [] });
+    const queryStr = q.trim();
+
+    // 1. Search registered Customers
     const customers = await Customer.find({
       $or: [
-        { name: { $regex: q.trim(), $options: 'i' } },
-        { mobile: { $regex: q.trim(), $options: 'i' } },
-        { customerId: { $regex: q.trim(), $options: 'i' } },
+        { name: { $regex: queryStr, $options: 'i' } },
+        { mobile: { $regex: queryStr, $options: 'i' } },
+        { customerId: { $regex: queryStr, $options: 'i' } },
       ],
       status: 'active'
     }).limit(20);
+
+    // 2. Also search past Sales by invoiceNumber, customerName, or customerMobile
+    const matchingSales = await Sale.find({
+      $or: [
+        { invoiceNumber: { $regex: queryStr, $options: 'i' } },
+        { customerName: { $regex: queryStr, $options: 'i' } },
+        { customerMobile: { $regex: queryStr, $options: 'i' } },
+      ],
+      customerName: { $nin: ['', 'Walk-in Customer', null] }
+    }).sort({ saleDate: -1 }).limit(10);
+
+    const existingCustIds = new Set(customers.map(c => c._id.toString()));
+    const existingCustNames = new Set(customers.map(c => (c.name || '').toLowerCase()));
+
+    for (const sale of matchingSales) {
+      if (sale.customer && !existingCustIds.has(sale.customer.toString())) {
+        const custDoc = await Customer.findById(sale.customer);
+        if (custDoc && !existingCustIds.has(custDoc._id.toString())) {
+          const custObj = custDoc.toObject ? custDoc.toObject() : { ...custDoc };
+          custObj.fromInvoice = sale.invoiceNumber;
+          customers.push(custObj);
+          existingCustIds.add(custDoc._id.toString());
+          existingCustNames.add((custDoc.name || '').toLowerCase());
+          continue;
+        }
+      }
+
+      const nameLower = (sale.customerName || '').toLowerCase();
+      if (nameLower && nameLower !== 'walk-in customer' && !existingCustNames.has(nameLower)) {
+        customers.push({
+          _id: sale.customer || sale._id,
+          name: sale.customerName,
+          mobile: sale.customerMobile || '',
+          customerId: sale.customerId || '',
+          fromInvoice: sale.invoiceNumber,
+          lastPurchaseAmount: sale.grandTotal,
+          lastPurchaseDate: sale.saleDate,
+          isFromSale: true,
+        });
+        existingCustNames.add(nameLower);
+      }
+    }
+
     res.json({ success: true, data: customers });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });

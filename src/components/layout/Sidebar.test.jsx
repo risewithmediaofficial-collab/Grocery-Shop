@@ -46,7 +46,8 @@ describe('Sidebar Component', () => {
     expect(screen.getByRole('link', { name: /Expiry/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Expenses/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Analytics/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Orders & Cart/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Online/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Offline/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Users/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Audit Logs/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Settings/i })).toBeInTheDocument();
@@ -84,5 +85,40 @@ describe('Sidebar Component', () => {
     const closeBtn = screen.getByTitle('Close sidebar');
     fireEvent.click(closeBtn);
     expect(onCloseMobile).toHaveBeenCalled();
+  });
+
+  it('renders restricted navigation for packer role (strictly Orders and Inventory)', async () => {
+    localStorage.setItem('user', JSON.stringify({ name: 'Suresh Packer', role: 'packer' }));
+    api.get.mockResolvedValue({
+      data: { user: { name: 'Suresh Packer', role: 'packer' } },
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <Sidebar collapsed={false} onToggle={vi.fn()} mobileOpen={false} onCloseMobile={vi.fn()} />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    // Allowed links for Packer
+    expect(screen.getByRole('link', { name: /Online/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Offline/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Products/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Stock Inventory/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Batches/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Expiry Tracking/i })).toBeInTheDocument();
+
+    // Restricted links NOT accessible by Packer
+    expect(screen.queryByRole('link', { name: /Dashboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /POS Billing/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Sales$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Returns/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Expenses/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Analytics/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Users/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Settings/i })).not.toBeInTheDocument();
   });
 });

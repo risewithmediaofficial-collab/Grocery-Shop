@@ -56,7 +56,7 @@ router.get('/:id', protect, async (req, res) => {
 });
 
 // POST /api/products
-router.post('/', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
+router.post('/', protect, authorize('admin', 'manager', 'cashier', 'packer'), async (req, res) => {
   try {
     const product = await Product.create(req.body);
     // Create opening stock movement
@@ -79,7 +79,7 @@ router.post('/', protect, authorize('admin', 'manager', 'cashier'), async (req, 
 });
 
 // PUT /api/products/:id
-router.put('/:id', protect, authorize('admin', 'manager', 'cashier'), async (req, res) => {
+router.put('/:id', protect, authorize('admin', 'manager', 'cashier', 'packer'), async (req, res) => {
   try {
     const existing = await Product.findById(req.params.id);
     if (!existing) return res.status(404).json({ success: false, message: 'Product not found' });

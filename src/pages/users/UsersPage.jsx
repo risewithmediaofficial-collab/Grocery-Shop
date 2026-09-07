@@ -9,6 +9,7 @@ const ROLES = [
   { value: 'admin', label: 'Admin / Store Owner', desc: 'Full unrestricted access to all modules, financial reports, user management, settings, & inventory' },
   { value: 'manager', label: 'Store Manager', desc: 'Can manage sales, purchases, inventory, suppliers, & view reports' },
   { value: 'cashier', label: 'Cashier & Store Staff', desc: 'POS Billing, customer lookups, receipts, purchase inward, product catalog, & stock management' },
+  { value: 'packer', label: 'Packer / Store Associate', desc: 'Dedicated packing checklist & order processing (online/offline), plus product catalog and stock inventory' },
 ];
 
 function UserModal({ user, onSave, onClose }) {
@@ -269,7 +270,8 @@ export default function UsersPage() {
                       'text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide',
                       u.role === 'admin' && 'bg-purple-100 text-purple-800',
                       u.role === 'manager' && 'bg-blue-100 text-blue-800',
-                      u.role === 'cashier' && 'bg-green-100 text-green-800'
+                      u.role === 'cashier' && 'bg-green-100 text-green-800',
+                      u.role === 'packer' && 'bg-amber-100 text-amber-800'
                     )}>
                       {u.role?.replace('_', ' ')}
                     </span>

@@ -96,7 +96,18 @@ export default function QuantityPackagingModal({ product, onConfirm, onClose }) 
               Select Packaging & Quantity
             </span>
             <h3 className="font-extrabold text-base sm:text-lg truncate">{product.name}</h3>
-            <p className="text-xs text-white/80">Base Price: ₹{baseRate} / {product.unit?.symbol || 'unit'}</p>
+            <div className="flex items-center gap-2 text-xs text-white/90 mt-0.5 flex-wrap">
+              <span>Base Rate: ₹{baseRate} / {product.unit?.symbol || 'kg'}</span>
+              <span>•</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full font-bold">
+                In Stock: {product.currentStock ?? 0} {product.unit?.symbol || 'kg'}
+              </span>
+              {product.brand?.name && product.brand?.name !== 'Local' && (
+                <span className="bg-white/25 px-2 py-0.5 rounded-full font-bold">
+                  Brand: {product.brand.name}
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -110,33 +121,35 @@ export default function QuantityPackagingModal({ product, onConfirm, onClose }) 
           {/* Loose / bulk quantity input */}
           {cfg.type === 'commodity_loose' && (
             <div className="space-y-3.5">
-              {/* Mode Switcher: Active mode is active, the other is blocked/hidden */}
-              <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100/90 rounded-2xl border border-gray-200/80">
-                <button
-                  type="button"
-                  onClick={() => setLooseMode('kg')}
-                  className={`py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    looseMode === 'kg'
-                      ? 'bg-primary-600 text-white shadow-xs scale-101'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                  }`}
-                >
-                  <Scale size={14} />
-                  <span>Loose by Weight (kg)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLooseMode('bag')}
-                  className={`py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    looseMode === 'bag'
-                      ? 'bg-emerald-600 text-white shadow-xs scale-101'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                  }`}
-                >
-                  <Package size={14} />
-                  <span>Whole Bags</span>
-                </button>
-              </div>
+              {/* Only show Wholesale Bags switcher IF explicit bag options exist in inventory */}
+              {cfg.bagOptions && cfg.bagOptions.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100/90 rounded-2xl border border-gray-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setLooseMode('kg')}
+                    className={`py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      looseMode === 'kg'
+                        ? 'bg-primary-600 text-white shadow-xs scale-101'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                    }`}
+                  >
+                    <Scale size={14} />
+                    <span>Loose by Weight ({product.unit?.symbol || 'kg'})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLooseMode('bag')}
+                    className={`py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      looseMode === 'bag'
+                        ? 'bg-emerald-600 text-white shadow-xs scale-101'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                    }`}
+                  >
+                    <Package size={14} />
+                    <span>Whole Bags</span>
+                  </button>
+                </div>
+              )}
 
               {/* KG Option Fields */}
               {looseMode === 'kg' ? (

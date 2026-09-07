@@ -3,13 +3,217 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   Plus, Search, Filter, Package, Edit, Trash2, BarChart2,
-  Eye, AlertTriangle, Layers, CheckCircle, Tag, ShoppingBag, X
+  Eye, AlertTriangle, Layers, CheckCircle, Tag, ShoppingBag, X,
+  Settings, ChevronRight, Loader2, FolderPlus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
 import CategoryIcon from '../../components/common/CategoryIcon';
+
+// ─── Inline Quick-Create Input ──────────────────────────────────────────────
+function QuickCreateInput({ placeholder, onSave, onCancel, loading }) {
+  const [val, setVal] = useState('');
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <input
+        autoFocus
+        className="form-input text-xs py-1.5 px-2.5 flex-1 border-primary-400 focus:border-primary-600"
+        placeholder={placeholder}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); if (val.trim()) onSave(val.trim()); }
+          if (e.key === 'Escape') onCancel();
+        }}
+      />
+      <button
+        type="button"
+        disabled={!val.trim() || loading}
+        onClick={() => { if (val.trim()) onSave(val.trim()); }}
+        className="btn-primary py-1.5 px-2.5 text-xs font-bold cursor-pointer disabled:opacity-50"
+      >
+        {loading ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
+      </button>
+      <button type="button" onClick={onCancel} className="btn-secondary py-1.5 px-2 text-xs cursor-pointer">
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
+// ─── Manage Categories & Brands Modal ───────────────────────────────────────
+function ManageCategoriesModal({ onClose, onRefresh }) {
+  const [tab, setTab] = useState('categories');
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
+  const [selectedCat, setSelectedCat] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [showNewSub, setShowNewSub] = useState(false);
+  const [showNewBrand, setShowNewBrand] = useState(false);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cRes, bRes] = await Promise.all([
+        api.get('/categories/categories'),
+        api.get('/categories/brands'),
+      ]);
+      const cats = cRes.data.data || [];
+      setCategories(cats);
+      setBrands(bRes.data.data || []);
+      if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0]);
+    } catch { toast.error('Failed to load data'); }
+    finally { setLoading(false); }
+  }, [selectedCat]);
+
+  useEffect(() => { loadAll(); }, []);
+
+  useEffect(() => {
+    if (selectedCat) {
+      api.get(`/categories/subcategories?category=${selectedCat._id}`)
+        .then(r => setSubcategories(r.data.data || []))
+        .catch(() => setSubcategories([]));
+    }
+  }, [selectedCat]);
+
+  const createCategory = async (name) => {
+    setSaving(true);
+    try {
+      const res = await api.post('/categories/categories', { name });
+      toast.success(`Category "${res.data.data.name}" created!`);
+      setShowNewCat(false);
+      const cRes = await api.get('/categories/categories');
+      const cats = cRes.data.data || [];
+      setCategories(cats);
+      onRefresh();
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setSaving(false); }
+  };
+
+  const createSubcategory = async (name) => {
+    if (!selectedCat) return toast.error('Select a category first');
+    setSaving(true);
+    try {
+      const res = await api.post('/categories/subcategories', { name, category: selectedCat._id });
+      toast.success(`Subcategory "${res.data.data.name}" created!`);
+      setShowNewSub(false);
+      const subs = await api.get(`/categories/subcategories?category=${selectedCat._id}`);
+      setSubcategories(subs.data.data || []);
+      onRefresh();
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setSaving(false); }
+  };
+
+  const createBrand = async (name) => {
+    setSaving(true);
+    try {
+      const res = await api.post('/categories/brands', { name });
+      toast.success(`Brand "${res.data.data.name}" created!`);
+      setShowNewBrand(false);
+      const bRes = await api.get('/categories/brands');
+      setBrands(bRes.data.data || []);
+      onRefresh();
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setSaving(false); }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary-100 rounded-xl flex items-center justify-center">
+              <Settings size={18} className="text-primary-700" />
+            </div>
+            <div>
+              <h2 className="font-extrabold text-base text-gray-900">Manage Categories & Brands</h2>
+              <p className="text-xs text-gray-500">Create and organise product taxonomy for your store</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex border-b border-gray-200 bg-gray-50 shrink-0">
+          {[{ id: 'categories', label: 'Categories & Subcategories', icon: <Layers size={14} /> }, { id: 'brands', label: 'Brands', icon: <Tag size={14} /> }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className={clsx('flex-1 flex items-center justify-center gap-1.5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer', tab === t.id ? 'border-primary-600 text-primary-700 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700')}>
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 gap-2 text-gray-400"><Loader2 size={20} className="animate-spin" /><span className="text-sm">Loading...</span></div>
+          ) : tab === 'categories' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-extrabold text-gray-600 uppercase tracking-wider">Categories ({categories.length})</p>
+                  {!showNewCat && <button type="button" onClick={() => setShowNewCat(true)} className="flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-800 cursor-pointer"><Plus size={13} /> Add</button>}
+                </div>
+                {showNewCat && <QuickCreateInput placeholder="e.g. Spices & Masalas" onSave={createCategory} onCancel={() => setShowNewCat(false)} loading={saving} />}
+                <div className="space-y-1.5 mt-2">
+                  {categories.map(cat => (
+                    <button key={cat._id} type="button" onClick={() => setSelectedCat(cat)} className={clsx('w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer', selectedCat?._id === cat._id ? 'bg-primary-600 text-white border-primary-600 shadow-sm' : 'bg-white text-gray-700 border-gray-200 hover:border-primary-300 hover:bg-primary-50')}>
+                      <span className="flex items-center gap-2"><CategoryIcon name={cat.name} size={13} />{cat.name}</span>
+                      <ChevronRight size={13} />
+                    </button>
+                  ))}
+                  {categories.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">No categories yet.</p>}
+                </div>
+              </div>
+              <div>
+                {selectedCat ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-extrabold text-gray-600 uppercase tracking-wider">{selectedCat.name} Subs ({subcategories.length})</p>
+                      {!showNewSub && <button type="button" onClick={() => setShowNewSub(true)} className="flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-800 cursor-pointer"><Plus size={13} /> Add Sub</button>}
+                    </div>
+                    {showNewSub && <QuickCreateInput placeholder="e.g. Chilli Powder" onSave={createSubcategory} onCancel={() => setShowNewSub(false)} loading={saving} />}
+                    <div className="space-y-1.5 mt-2">
+                      {subcategories.map(sub => (
+                        <div key={sub._id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700">
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary-500 shrink-0" />{sub.name}
+                        </div>
+                      ))}
+                      {subcategories.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">No subcategories yet.</p>}
+                    </div>
+                  </>
+                ) : <div className="flex items-center justify-center h-full text-gray-400 text-xs text-center pt-8">← Select a category to manage its subcategories</div>}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-extrabold text-gray-600 uppercase tracking-wider">All Brands ({brands.length})</p>
+                {!showNewBrand && <button type="button" onClick={() => setShowNewBrand(true)} className="flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-800 cursor-pointer"><Plus size={13} /> Add Brand</button>}
+              </div>
+              {showNewBrand && <QuickCreateInput placeholder="e.g. Sakthi, Aachi, Everest, Tata" onSave={createBrand} onCancel={() => setShowNewBrand(false)} loading={saving} />}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {brands.map(b => (
+                  <span key={b._id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-800 border border-gray-200 text-xs font-bold"><Tag size={11} className="text-gray-500" />{b.name}</span>
+                ))}
+                {brands.length === 0 && <p className="text-xs text-gray-400 py-4 w-full text-center">No brands yet.</p>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end shrink-0">
+          <button onClick={onClose} className="btn-secondary py-2 px-5 text-xs font-bold cursor-pointer">Done</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -22,7 +226,7 @@ const CATEGORY_BADGES = {
   'household': 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
-function ProductForm({ product, categories, units, brands, onSave, onClose, defaultCategory = '' }) {
+function ProductForm({ product, categories: initCategories, units, brands: initBrands, onSave, onClose, defaultCategory = '' }) {
   const [form, setForm] = useState(() => {
     if (product) {
       return {
@@ -41,9 +245,56 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
       batchTracking: false, expiryTracking: false, status: 'active',
     };
   });
+  const [categories, setCategories] = useState(initCategories);
+  const [brands, setBrands] = useState(initBrands);
   const [subCategories, setSubCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Inline create states
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [showNewSub, setShowNewSub] = useState(false);
+  const [showNewBrand, setShowNewBrand] = useState(false);
+  const [inlineSaving, setInlineSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleInlineNewCategory = async (name) => {
+    setInlineSaving(true);
+    try {
+      const res = await api.post('/categories/categories', { name });
+      const newCat = res.data.data;
+      setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+      set('category', newCat._id); set('subCategory', '');
+      setShowNewCat(false);
+      toast.success(`Category "${newCat.name}" created & selected!`);
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setInlineSaving(false); }
+  };
+
+  const handleInlineNewSubcategory = async (name) => {
+    if (!form.category) return toast.error('Select a category first');
+    setInlineSaving(true);
+    try {
+      const res = await api.post('/categories/subcategories', { name, category: form.category });
+      const newSub = res.data.data;
+      setSubCategories(prev => [...prev, newSub].sort((a, b) => a.name.localeCompare(b.name)));
+      set('subCategory', newSub._id);
+      setShowNewSub(false);
+      toast.success(`Subcategory "${newSub.name}" created & selected!`);
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setInlineSaving(false); }
+  };
+
+  const handleInlineNewBrand = async (name) => {
+    setInlineSaving(true);
+    try {
+      const res = await api.post('/categories/brands', { name });
+      const newBrand = res.data.data;
+      setBrands(prev => [...prev, newBrand].sort((a, b) => a.name.localeCompare(b.name)));
+      set('brand', newBrand._id);
+      setShowNewBrand(false);
+      toast.success(`Brand "${newBrand.name}" created & selected!`);
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setInlineSaving(false); }
+  };
 
   // Load subcategories when category changes
   useEffect(() => {
@@ -144,40 +395,46 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="form-label font-bold text-xs">Primary Category *</label>
-                <select
-                  className="form-select font-semibold"
-                  required
-                  value={form.category}
-                  onChange={e => {
-                    set('category', e.target.value);
-                    set('subCategory', '');
-                  }}
-                >
-                  <option value="">-- Choose Category --</option>
-                  {categories.map(c => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="form-label font-bold text-xs flex items-center justify-between">
+                  <span>Primary Category *</span>
+                  {!showNewCat && (
+                    <button type="button" onClick={() => setShowNewCat(true)} className="text-[10px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-0.5 cursor-pointer">
+                      <Plus size={11} /> New Category
+                    </button>
+                  )}
+                </label>
+                {showNewCat ? (
+                  <QuickCreateInput placeholder="e.g. Spices & Masalas" onSave={handleInlineNewCategory} onCancel={() => setShowNewCat(false)} loading={inlineSaving} />
+                ) : (
+                  <select
+                    className="form-select font-semibold"
+                    required
+                    value={form.category}
+                    onChange={e => { set('category', e.target.value); set('subCategory', ''); }}
+                  >
+                    <option value="">-- Choose Category --</option>
+                    {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                  </select>
+                )}
               </div>
 
               <div>
-                <label className="form-label text-xs">Sub-Category</label>
-                <select
-                  className="form-select"
-                  value={form.subCategory}
-                  onChange={e => set('subCategory', e.target.value)}
-                  disabled={!form.category || subCategories.length === 0}
-                >
-                  <option value="">
-                    {form.category ? (subCategories.length > 0 ? '-- Select Subcategory --' : 'No Subcategories') : 'Select Category First'}
-                  </option>
-                  {subCategories.map(s => (
-                    <option key={s._id} value={s._id}>{s.name}</option>
-                  ))}
-                </select>
+                <label className="form-label text-xs flex items-center justify-between">
+                  <span>Sub-Category</span>
+                  {!showNewSub && form.category && (
+                    <button type="button" onClick={() => setShowNewSub(true)} className="text-[10px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-0.5 cursor-pointer">
+                      <Plus size={11} /> New Sub
+                    </button>
+                  )}
+                </label>
+                {showNewSub ? (
+                  <QuickCreateInput placeholder="e.g. Chilli Powder" onSave={handleInlineNewSubcategory} onCancel={() => setShowNewSub(false)} loading={inlineSaving} />
+                ) : (
+                  <select className="form-select" value={form.subCategory} onChange={e => set('subCategory', e.target.value)} disabled={!form.category || subCategories.length === 0}>
+                    <option value="">{form.category ? (subCategories.length > 0 ? '-- Select Subcategory --' : 'No Subcategories') : 'Select Category First'}</option>
+                    {subCategories.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                )}
               </div>
 
               <div className="sm:col-span-2">
@@ -202,13 +459,22 @@ function ProductForm({ product, categories, units, brands, onSave, onClose, defa
               </div>
 
               <div>
-                <label className="form-label text-xs">Brand</label>
-                <select className="form-select" value={form.brand} onChange={e => set('brand', e.target.value)}>
-                  <option value="">-- Optional Brand --</option>
-                  {brands.map(b => (
-                    <option key={b._id} value={b._id}>{b.name}</option>
-                  ))}
-                </select>
+                <label className="form-label text-xs flex items-center justify-between">
+                  <span>Brand</span>
+                  {!showNewBrand && (
+                    <button type="button" onClick={() => setShowNewBrand(true)} className="text-[10px] font-bold text-primary-600 hover:text-primary-800 flex items-center gap-0.5 cursor-pointer">
+                      <Plus size={11} /> New Brand
+                    </button>
+                  )}
+                </label>
+                {showNewBrand ? (
+                  <QuickCreateInput placeholder="e.g. Sakthi, Aachi, Everest" onSave={handleInlineNewBrand} onCancel={() => setShowNewBrand(false)} loading={inlineSaving} />
+                ) : (
+                  <select className="form-select" value={form.brand} onChange={e => set('brand', e.target.value)}>
+                    <option value="">-- Optional Brand / Loose --</option>
+                    {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -503,14 +769,15 @@ export default function ProductsPage() {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedCategoryTab, setSelectedCategoryTab] = useState('all'); // 'all' or categoryId
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
+  const [showManageModal, setShowManageModal] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
   // Load Categories, Units, Brands
-  useEffect(() => {
+  const loadMeta = useCallback(() => {
     Promise.all([
       api.get('/categories/categories'),
       api.get('/categories/units'),
@@ -521,6 +788,8 @@ export default function ProductsPage() {
       setBrands(b.data.data || []);
     }).catch(console.error);
   }, []);
+
+  useEffect(() => { loadMeta(); }, [loadMeta]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -588,12 +857,21 @@ export default function ProductsPage() {
           <h1 className="page-title">Products & Inventory Catalog</h1>
           <p className="page-subtitle">{total} total items organized by category</p>
         </div>
-        <button
-          className="btn-primary gap-1.5 shadow-sm"
-          onClick={() => { setEditProduct(null); setShowForm(true); }}
-        >
-          <Plus size={16} /> Add Product
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            className="btn-secondary gap-1.5 shadow-sm text-xs font-bold"
+            onClick={() => setShowManageModal(true)}
+            title="Manage Categories, Subcategories & Brands"
+          >
+            <Settings size={14} /> Manage Categories
+          </button>
+          <button
+            className="btn-primary gap-1.5 shadow-sm"
+            onClick={() => { setEditProduct(null); setShowForm(true); }}
+          >
+            <Plus size={16} /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Structured Category Navigation Tabs */}
@@ -786,10 +1064,19 @@ export default function ProductsPage() {
           units={units}
           brands={brands}
           defaultCategory={selectedCategoryTab !== 'all' ? selectedCategoryTab : ''}
-          onSave={() => { setShowForm(false); fetchProducts(); }}
+          onSave={() => { setShowForm(false); fetchProducts(); loadMeta(); }}
           onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {/* Manage Categories & Brands Modal */}
+      {showManageModal && (
+        <ManageCategoriesModal
+          onClose={() => setShowManageModal(false)}
+          onRefresh={loadMeta}
         />
       )}
     </div>
   );
 }
+

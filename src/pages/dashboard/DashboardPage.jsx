@@ -85,8 +85,12 @@ export default function DashboardPage() {
 
   // Initial load
   useEffect(() => {
+    if (user?.role === 'packer') {
+      navigate('/orders', { replace: true });
+      return;
+    }
     fetchDashboardData(true);
-  }, [fetchDashboardData]);
+  }, [user, navigate, fetchDashboardData]);
 
   // Real-time polling every 12 seconds so new incoming orders appear on the dashboard automatically
   useEffect(() => {
@@ -190,15 +194,20 @@ export default function DashboardPage() {
       </div>
 
       {/* Incoming Orders Alert */}
-      <div className="card p-4 sm:p-5 border-2 border-amber-300 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 shadow-sm space-y-3">
+      <div
+        className="card p-4 sm:p-5 border-2 border-amber-300 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 shadow-sm space-y-3"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/70 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+          <div
+            onClick={() => navigate('/orders')}
+            className="flex items-center gap-2.5 cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs group-hover:scale-105 transition-transform">
               <Bell size={17} className={pendingOrdersCount > 0 ? 'animate-bounce' : ''} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-sm sm:text-base text-gray-900">Incoming Customer Orders</h2>
+                <h2 className="font-extrabold text-sm sm:text-base text-gray-900 group-hover:text-amber-900 transition-colors">Incoming Customer Orders</h2>
                 {pendingOrdersCount > 0 ? (
                   <span className="bg-amber-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full animate-pulse">
                     {pendingOrdersCount} Pending Action
@@ -211,7 +220,7 @@ export default function DashboardPage() {
               </div>
               <p className="text-xs text-gray-600 mt-0.5">
                 {pendingOrdersCount > 0
-                  ? `New online orders from customers requiring billing or packing.`
+                  ? `New online orders from customers requiring billing or packing. Click to view order queue.`
                   : `Online customer orders placed via mobile or web portal show here in real-time.`}
               </p>
             </div>
@@ -219,7 +228,7 @@ export default function DashboardPage() {
 
           <Link
             to="/orders"
-            className="text-xs font-bold text-amber-900 hover:text-amber-950 flex items-center gap-1 self-start sm:self-center"
+            className="text-xs font-bold text-amber-900 hover:text-amber-950 flex items-center gap-1 self-start sm:self-center bg-amber-100/80 hover:bg-amber-200/80 px-3 py-1.5 rounded-xl transition-all"
           >
             <span>View All Orders Queue ({activeOrdersCount})</span>
             <ArrowRight size={13} />
@@ -239,7 +248,8 @@ export default function DashboardPage() {
               return (
                 <div
                   key={order._id}
-                  className="bg-white rounded-2xl p-3.5 border border-amber-200/80 hover:border-amber-400 transition-all shadow-xs flex flex-col justify-between space-y-2.5"
+                  onClick={() => navigate('/orders')}
+                  className="bg-white rounded-2xl p-3.5 border border-amber-200/80 hover:border-amber-400 transition-all shadow-xs flex flex-col justify-between space-y-2.5 cursor-pointer hover:shadow-sm"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-1.5">
@@ -275,12 +285,14 @@ export default function DashboardPage() {
                     </span>
                     <button
                       type="button"
-                      disabled={processingOrderId === order._id}
-                      onClick={() => handleSendOrderToBilling(order)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate('/orders');
+                      }}
                       className="btn-primary btn-sm text-[11px] font-bold py-1 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer"
                     >
-                      <Send size={11} />
-                      <span>{processingOrderId === order._id ? 'Loading...' : 'Bill in POS'}</span>
+                      <Package size={12} />
+                      <span>View & Pack Order</span>
                     </button>
                   </div>
                 </div>

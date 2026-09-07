@@ -1,9 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import {
-  CheckCircle2, Store, Home, Truck, Package,
-  ReceiptText, AlertCircle, Navigation2
+  CheckCircle2, Store, Home, Package,
+  ReceiptText, AlertCircle, Bike
 } from 'lucide-react';
 import clsx from 'clsx';
+
+// Clean Delivery Boy on Bike SVG icon
+function DeliveryBoyBikeIcon({ className = "w-4 h-4 text-white" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {/* Rear Wheel */}
+      <circle cx="5.5" cy="17.5" r="2.5" />
+      {/* Front Wheel */}
+      <circle cx="18.5" cy="17.5" r="2.5" />
+      {/* Scooter Frame */}
+      <path d="M5.5 17.5h3l3.5-6.5h4.5l2 6.5" />
+      {/* Handlebars */}
+      <path d="M16.5 11h2.5" />
+      {/* Delivery Box */}
+      <rect x="2.5" y="9" width="4.5" height="5" rx="1" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="1.5" />
+      {/* Rider Helmet */}
+      <circle cx="12" cy="6" r="2" fill="currentColor" />
+      {/* Rider Arm to handlebar */}
+      <path d="M12 8l2.5 3" />
+    </svg>
+  );
+}
 
 /**
  * OrderStatusTracker — Clean, professional delivery tracking component.
@@ -17,7 +39,7 @@ export default function OrderStatusTracker({ order }) {
   const STEPS = [
     { key: 'confirmed',        label: 'Confirmed',  Icon: ReceiptText },
     { key: 'packing',          label: 'Packing',    Icon: Package     },
-    { key: 'out_for_delivery', label: 'On the Way', Icon: Truck       },
+    { key: 'out_for_delivery', label: 'On the Way', Icon: Bike        },
     { key: 'delivered',        label: 'Delivered',  Icon: Home        },
   ];
 
@@ -27,6 +49,70 @@ export default function OrderStatusTracker({ order }) {
   else if (['packing', 'ready', 'processing'].includes(rawStatus)) activeStep = 1;
 
   const progressPercent = [0, 33, 66, 100][activeStep];
+
+  const isDelivered = rawStatus === 'delivered';
+  const isOutForDel = rawStatus === 'out_for_delivery';
+  const isPacking   = rawStatus === 'packing' || rawStatus === 'processing';
+  const isReady     = rawStatus === 'ready';
+
+  // Realistic delivery rider progress:
+  // - Out for delivery: advances slowly in real time, capped at 78% (75-80% range) while waiting for delivery
+  // - NEVER rewinds/loops back!
+  // - After delivered: makes full to 100%
+  const getInitialProgress = () => {
+    if (isDelivered) return 100;
+    if (!isOutForDel) return 0;
+
+    const outForDelLog = (order?.statusLogs || [])
+      .slice()
+      .reverse()
+      .find(l => l.status === 'out_for_delivery');
+    const startTimeStr = outForDelLog?.changedAt || (rawStatus === 'out_for_delivery' ? order?.updatedAt : null) || order?.createdAt;
+
+    if (startTimeStr) {
+      const elapsedSec = (Date.now() - new Date(startTimeStr).getTime()) / 1000;
+      if (elapsedSec > 0) {
+        // Realistic trip time ~12 minutes (720s) to go from 15% to 78%
+        const computed = 15 + (elapsedSec / 720) * 63;
+        // Cap at 78% (75-80% range) while out for delivery
+        return Math.min(78, Math.max(15, Number(computed.toFixed(1))));
+      }
+    }
+    return 20;
+  };
+
+  const [riderProgress, setRiderProgress] = useState(getInitialProgress);
+
+  useEffect(() => {
+    if (isDelivered) {
+      setRiderProgress(100);
+      return;
+    }
+    if (!isOutForDel) return;
+
+    // Ensure progress does not rewind
+    setRiderProgress(prev => {
+      const init = getInitialProgress();
+      return Math.min(78, Math.max(prev, init));
+    });
+
+    // Slow, realistic real-time advance (creeps forward smoothly, capped at 78%)
+    // Never resets or rewinds!
+    const interval = setInterval(() => {
+      setRiderProgress(prev => {
+        // Stop in 75-80% (78%) if delivery is running late - NEVER rewind!
+        if (prev >= 78) return 78;
+        return Number(Math.min(78, prev + 0.1).toFixed(2));
+      });
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isOutForDel, isDelivered, order?.status, order?.updatedAt]);
+
+  const activeTrackPercent = isDelivered ? 100
+    : isOutForDel ? riderProgress
+    : isPacking || isReady ? 33
+    : 0;
 
   // Animated dots for live statuses
   const [dots, setDots] = useState('');
@@ -38,11 +124,6 @@ export default function OrderStatusTracker({ order }) {
   }, [rawStatus]);
 
   if (!order) return null;
-
-  const isDelivered     = rawStatus === 'delivered';
-  const isOutForDel     = rawStatus === 'out_for_delivery';
-  const isPacking       = rawStatus === 'packing' || rawStatus === 'processing';
-  const isReady         = rawStatus === 'ready';
 
   // Accent: emerald when done/confirmed, orange when actively moving
   const accentClass = isDelivered ? 'bg-emerald-500'
@@ -96,7 +177,11 @@ export default function OrderStatusTracker({ order }) {
             </p>
             {!isCancelled && (
               <p className="text-[11px] text-slate-400 mt-0.5 leading-none truncate">
-                {isOutForDel ? `Live Delivery Tracking Active • Driver en route to ${address.split(',')[0]}` :
+                {isOutForDel ? (
+                   riderProgress >= 75
+                     ? `Rider near destination (${address.split(',')[0]}) • Arriving shortly`
+                     : `Live Delivery Tracking Active • Driver en route to ${address.split(',')[0]}`
+                 ) :
                  isDelivered  ? `Arrived at destination (${address.split(',')[0]})` :
                  isPacking    ? 'Packing in progress! Staff Quality Checking your items' :
                  isReady      ? 'Bags sealed — awaiting courier' :
@@ -143,29 +228,69 @@ export default function OrderStatusTracker({ order }) {
             {/* Middle track */}
             <div className="flex-1 relative mx-3 flex items-center">
               {/* Base track */}
-              <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className={clsx(
-                    'h-full rounded-full transition-all duration-1000',
-                    isDelivered ? 'bg-slate-800'
-                    : isOutForDel ? 'bg-orange-400 delivery-shimmer'
+                    'h-full rounded-full transition-all duration-1000 ease-out',
+                    isDelivered ? 'bg-emerald-500'
+                    : isOutForDel ? 'bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 delivery-shimmer'
                     : isPacking  ? 'bg-slate-400'
                     :              'bg-emerald-500'
                   )}
-                  style={{ width: `${progressPercent}%` }}
+                  style={{ width: `${activeTrackPercent}%` }}
                 />
               </div>
 
-              {/* Rider icon — only while out for delivery */}
-              {isOutForDel && (
+              {/* Delivery Boy on Bike — moving smoothly towards destination, capped at 78% until delivered, reaching 100% full when delivered */}
+              {(isOutForDel || isDelivered) && (
                 <div
-                  className="absolute animate-rider-bounce"
-                  style={{ left: `calc(${progressPercent}% - 20px)` }}
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-20 transition-all duration-1000 ease-out"
+                  style={{ left: `${isDelivered ? 100 : riderProgress}%` }}
                 >
-                  <div className="relative">
-                    <span className="absolute -inset-1.5 rounded-full bg-orange-300/30 animate-ping" />
-                    <div className="w-7 h-7 rounded-full bg-slate-900 border-2 border-orange-400 flex items-center justify-center shadow-md relative z-10">
-                      <Navigation2 size={12} className="text-orange-300 fill-orange-300" />
+                  <div className="relative flex items-center justify-center group">
+                    {/* Pulsing radar sonar wave rings (active while en route) */}
+                    {isOutForDel && (
+                      <>
+                        <span className="absolute -inset-2 rounded-full bg-orange-400/35 animate-ping pointer-events-none" />
+                        <span className="absolute -inset-1 rounded-full bg-orange-500/20 animate-pulse pointer-events-none" />
+                      </>
+                    )}
+
+                    {/* Bike & Delivery Boy Circular Badge */}
+                    <div className={clsx(
+                      'w-8 h-8 rounded-full border-2 border-white shadow-lg flex items-center justify-center relative z-10 transition-all duration-500',
+                      isDelivered
+                        ? 'bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 scale-105'
+                        : 'bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 animate-rider-bounce'
+                    )}>
+                      <DeliveryBoyBikeIcon className="w-4 h-4 text-white" />
+                    </div>
+
+                    {/* Floating pill badge moving with rider */}
+                    <div className={clsx(
+                      'absolute -top-7 whitespace-nowrap text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-md flex items-center gap-1.5 z-30 transition-all duration-300',
+                      isDelivered
+                        ? 'bg-emerald-700 border border-emerald-500 shadow-emerald-900/20'
+                        : riderProgress >= 75
+                        ? 'bg-slate-900 border border-amber-500/60 shadow-amber-900/20'
+                        : 'bg-slate-900 border border-slate-700'
+                    )}>
+                      {isDelivered ? (
+                        <>
+                          <CheckCircle2 size={10} className="text-emerald-300 shrink-0" />
+                          <span>Delivered at Doorstep</span>
+                        </>
+                      ) : riderProgress >= 75 ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                          <span>Arriving Soon • Near Destination</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          <span>Rider En Route</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

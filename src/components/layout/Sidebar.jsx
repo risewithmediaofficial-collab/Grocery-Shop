@@ -1,13 +1,14 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Receipt, Users, Package,
   Truck, BarChart3, Settings, ChevronLeft, ChevronRight,
   RotateCcw, FileText, UserCog,
   Warehouse, Clock, TrendingUp, ShoppingBag, CreditCard,
-  Layers, Store, X, Menu, PanelLeftClose, PanelLeftOpen
+  Layers, Store, Globe, X, Menu, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import clsx from 'clsx';
 
 const NavSection = ({ label, children }) => (
@@ -17,30 +18,138 @@ const NavSection = ({ label, children }) => (
   </div>
 );
 
-const NavItem = ({ to, icon: Icon, label, collapsed, onClick }) => (
-  <NavLink
-    to={to}
-    onClick={onClick}
-    className={({ isActive }) => clsx('sidebar-link', isActive && 'active')}
-    title={collapsed ? label : undefined}
-  >
-    <Icon size={18} className="shrink-0" />
-    {!collapsed && <span className="truncate">{label}</span>}
-  </NavLink>
-);
+const NavItem = ({ to, icon: Icon, label, collapsed, onClick }) => {
+  const location = useLocation();
+
+  const isActive = useMemo(() => {
+    const [toPath, toQuery] = to.split('?');
+    if (location.pathname !== toPath) return false;
+
+    if (toQuery === 'type=offline') {
+      return location.search.includes('type=offline');
+    }
+    if (toQuery === 'type=online' || toPath === '/orders') {
+      return !location.search.includes('type=offline');
+    }
+    if (toQuery) {
+      return location.search.includes(toQuery);
+    }
+    return true;
+  }, [to, location.pathname, location.search]);
+
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className={clsx('sidebar-link', isActive && 'active')}
+      title={collapsed ? label : undefined}
+    >
+      <Icon size={18} className="shrink-0" />
+      {!collapsed && <span className="truncate">{label}</span>}
+    </Link>
+  );
+};
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
-  const { isAdmin, isManager } = useAuth();
+  const { isAdmin, isManager, isPacker } = useAuth();
+  const [onlineCount, setOnlineCount] = useState(0);
+  const [offlineCount, setOfflineCount] = useState(0);
 
-  const renderNavLinks = (isMobile = false) => (
-    <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 sidebar-scrollbar">
-      <NavItem
-        to="/dashboard"
-        icon={LayoutDashboard}
-        label="Dashboard"
-        collapsed={!isMobile && collapsed}
-        onClick={isMobile ? onCloseMobile : undefined}
-      />
+  useEffect(() => {
+    let mounted = true;
+    const fetchCounts = async () => {
+      try {
+        const res = await api.get('/orders/counts');
+        if (mounted && res.data?.data) {
+          setOnlineCount(res.data.data.online || 0);
+          setOfflineCount(res.data.data.offline || 0);
+        }
+      } catch {
+        try {
+          const res = await api.get('/orders');
+          if (mounted && res.data?.data) {
+            const list = res.data.data || [];
+            const off = list.filter(o => o.orderType === 'offline').length;
+            const on = list.filter(o => (o.orderType || 'online') === 'online').length;
+            setOnlineCount(on);
+            setOfflineCount(off);
+          }
+        } catch {}
+      }
+    };
+
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 15000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const renderNavLinks = (isMobile = false) => {
+    if (isPacker && isPacker()) {
+      return (
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 sidebar-scrollbar">
+          <NavSection label={(!isMobile && collapsed) ? '' : 'Order Packing'}>
+            <NavItem
+              to="/orders?type=online"
+              icon={Globe}
+              label={`🌐 Online (${onlineCount})`}
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+            <NavItem
+              to="/orders?type=offline"
+              icon={Store}
+              label={`🏪 Offline (${offlineCount})`}
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+          </NavSection>
+
+          <NavSection label={(!isMobile && collapsed) ? '' : 'Inventory Management'}>
+            <NavItem
+              to="/products"
+              icon={Package}
+              label="Products"
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+            <NavItem
+              to="/inventory"
+              icon={Warehouse}
+              label="Stock Inventory"
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+            <NavItem
+              to="/batches"
+              icon={Layers}
+              label="Batches"
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+            <NavItem
+              to="/expiry"
+              icon={Clock}
+              label="Expiry Tracking"
+              collapsed={!isMobile && collapsed}
+              onClick={isMobile ? onCloseMobile : undefined}
+            />
+          </NavSection>
+        </nav>
+      );
+    }
+
+    return (
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 sidebar-scrollbar">
+        <NavItem
+          to="/dashboard"
+          icon={LayoutDashboard}
+          label="Dashboard"
+          collapsed={!isMobile && collapsed}
+          onClick={isMobile ? onCloseMobile : undefined}
+        />
 
       <NavSection label={(!isMobile && collapsed) ? '' : 'Sales'}>
         <NavItem
@@ -143,9 +252,16 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
 
       <NavSection label={(!isMobile && collapsed) ? '' : 'Orders'}>
         <NavItem
-          to="/orders"
-          icon={FileText}
-          label="Orders & Cart"
+          to="/orders?type=online"
+          icon={Globe}
+          label={`🌐 Online (${onlineCount})`}
+          collapsed={!isMobile && collapsed}
+          onClick={isMobile ? onCloseMobile : undefined}
+        />
+        <NavItem
+          to="/orders?type=offline"
+          icon={Store}
+          label={`🏪 Offline (${offlineCount})`}
           collapsed={!isMobile && collapsed}
           onClick={isMobile ? onCloseMobile : undefined}
         />
@@ -179,7 +295,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
         </NavSection>
       )}
     </nav>
-  );
+    );
+  };
 
   return (
     <>

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const customerSchema = new mongoose.Schema({
   customerId: { type: String, unique: true }, // Auto-gen: CUST-00001
   name: { type: String, required: true, trim: true }, // NOT unique — multiple customers can share name
-  mobile: { type: String, required: true, trim: true },
+  mobile: { type: String, trim: true, default: '' },
   altMobile: { type: String, trim: true },
   address: { type: String },
   city: { type: String, default: 'Krishnagiri' },

@@ -56,7 +56,7 @@ export default function SalesPage() {
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               className="form-input pl-9"
-              placeholder="Search Invoice # or Customer Name..."
+              placeholder="Search Invoice #, Customer Name, or Mobile..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
             />

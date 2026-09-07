@@ -5,8 +5,12 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem('user');
+      return (stored && stored !== 'undefined' && stored !== 'null') ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
   });
   const [loading, setLoading] = useState(true);
 
@@ -41,9 +45,10 @@ export function AuthProvider({ children }) {
   const isAdmin = () => user?.role === 'admin';
   const isManager = () => ['admin', 'manager'].includes(user?.role);
   const isCashier = () => ['admin', 'manager', 'cashier'].includes(user?.role);
+  const isPacker = () => user?.role === 'packer';
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasRole, isAdmin, isManager, isCashier }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasRole, isAdmin, isManager, isCashier, isPacker }}>
       {children}
     </AuthContext.Provider>
   );

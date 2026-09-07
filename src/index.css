@@ -521,16 +521,12 @@
 }
 
 @keyframes rider-bounce-y {
-  0%,100% { transform: translateY(0px); }
-  50%      { transform: translateY(-3px); }
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-2px); }
 }
 
 .animate-rider-bounce {
-  animation: rider-bounce-y 0.8s ease-in-out infinite;
-  position: absolute;
-  transform: translateY(-50%);
-  top: 50%;
-  margin-top: -16px;
+  animation: rider-bounce-y 1.2s ease-in-out infinite;
 }
 
 /* Delivery trail shimmer */
@@ -542,12 +538,12 @@
 .delivery-shimmer {
   background-image: linear-gradient(
     90deg,
-    #7c3aed 0%,
-    #a78bfa 40%,
-    #7c3aed 100%
+    #f97316 0%,
+    #fbbf24 50%,
+    #f97316 100%
   );
-  background-size: 400px 100%;
-  animation: shimmer-move 1.8s linear infinite;
+  background-size: 300px 100%;
+  animation: shimmer-move 2.2s linear infinite;
 }
 
 /* ── Premium Glassmorphism & UI Accents ── */

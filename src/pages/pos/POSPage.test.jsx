@@ -26,6 +26,10 @@ describe('POSPage Component & Buttons', () => {
       barcode: '8901234567890',
       category: { name: 'food' },
       unit: { symbol: 'kg' },
+      bagOptions: [
+        { id: 'bag_25', label: '25 kg Bag', kg: 25, price: 3900 },
+        { id: 'bag_50', label: '50 kg Bag', kg: 50, price: 7600 },
+      ],
     },
     {
       _id: 'p2',
@@ -487,5 +491,85 @@ describe('POSPage Component & Buttons', () => {
     expect(screen.getByText(/2 items in basket/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('7')).toBeInTheDocument();
     expect(screen.getByDisplayValue('4')).toBeInTheDocument();
+  });
+
+  it('allows manual UPI amount entry and optional UTR reference during checkout', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          invoiceNumber: 'INV-0099',
+          grandTotal: 140,
+          paymentMethod: 'upi',
+          paymentDetails: [{ method: 'upi', amount: 140, reference: 'UTR-123456789' }],
+        },
+      },
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <CartProvider>
+              <POSPage />
+            </CartProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    // 1. Add Sunflower Oil 1L to bill
+    const oilCard = screen.getByText('Sunflower Oil 1L');
+    await act(async () => {
+      fireEvent.click(oilCard);
+    });
+
+    const addBtn = screen.getByRole('button', { name: /Add to Bill/i });
+    await act(async () => {
+      fireEvent.click(addBtn);
+    });
+
+    // 2. Open payment modal
+    const completeBillBtn = screen.getByRole('button', { name: /COMPLETE BILL/i });
+    await act(async () => {
+      fireEvent.click(completeBillBtn);
+    });
+
+    // 3. Switch payment method to UPI
+    const upiBtn = screen.getByRole('button', { name: /UPI/i });
+    await act(async () => {
+      fireEvent.click(upiBtn);
+    });
+
+    // Verify UPI Shop Scanner QR section, manual amount input, and UTR input are present
+    expect(screen.getByText(/Shop Scanner \/ Counter QR Code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Amount Received via UPI/i)).toBeInTheDocument();
+
+    const utrInput = screen.getByPlaceholderText(/GPay \/ PhonePe reference/i);
+    expect(utrInput).toBeInTheDocument();
+
+    // 4. Enter UTR reference number
+    await act(async () => {
+      fireEvent.change(utrInput, { target: { value: 'UTR-123456789' } });
+    });
+
+    // 5. Submit Complete Bill inside modal
+    const finalizeButtons = screen.getAllByRole('button', { name: /Complete Bill/i });
+    const finalizeBtn = finalizeButtons[finalizeButtons.length - 1];
+    await act(async () => {
+      fireEvent.click(finalizeBtn);
+    });
+
+    // Verify api.post called with paymentDetails containing upi and reference
+    expect(api.post).toHaveBeenCalledWith(
+      '/sales',
+      expect.objectContaining({
+        paymentMethod: 'upi',
+        paymentDetails: expect.arrayContaining([
+          expect.objectContaining({ method: 'upi', reference: 'UTR-123456789' })
+        ]),
+        notes: expect.stringContaining('UPI Ref: UTR-123456789')
+      })
+    );
   });
 });

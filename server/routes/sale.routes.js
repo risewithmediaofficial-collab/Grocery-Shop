@@ -3,6 +3,8 @@ const router = express.Router();
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
+const Order = require('../models/Order');
+const User = require('../models/User');
 const { CustomerLedger } = require('../models/Ledger');
 const { Setting } = require('../models/System');
 const stockService = require('../services/stock.service');
@@ -48,7 +50,13 @@ router.get('/', protect, async (req, res) => {
   try {
     const { search, customer, dateFrom, dateTo, status, page = 1, limit = 20 } = req.query;
     const query = {};
-    if (search) query.$or = [{ invoiceNumber: { $regex: search, $options: 'i' } }, { customerName: { $regex: search, $options: 'i' } }];
+    if (search) {
+      query.$or = [
+        { invoiceNumber: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { customerMobile: { $regex: search, $options: 'i' } },
+      ];
+    }
     if (customer) query.customer = customer;
     if (status) query.status = status;
     if (dateFrom || dateTo) {
@@ -74,7 +82,19 @@ router.get('/:id', protect, async (req, res) => {
 // POST /api/sales — Complete a sale (THE CORE TRANSACTION)
 router.post('/', protect, async (req, res) => {
   try {
-    const { customerId, items, discount, paymentMethod, paymentDetails, amountPaid, notes } = req.body;
+    const {
+      customerId,
+      customerName: reqCustomerName,
+      customerMobile: reqCustomerMobile,
+      items,
+      discount,
+      paymentMethod,
+      paymentDetails,
+      amountPaid,
+      notes,
+      assignedPackerId,
+      assignedPackerName
+    } = req.body;
 
     if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No items in cart' });
 
@@ -84,15 +104,52 @@ router.post('/', protect, async (req, res) => {
 
     // Get customer info
     let customer = null;
-    let customerName = 'Walk-in Customer';
-    let customerMobile = '';
+    let customerName = (reqCustomerName || '').trim() || 'Walk-in Customer';
+    let customerMobile = (reqCustomerMobile || '').trim();
     let customerState = shopSettings.state;
+
     if (customerId) {
       customer = await Customer.findById(customerId);
       if (customer) {
         customerName = customer.name;
         customerMobile = customer.mobile;
         customerState = customer.state || shopSettings.state;
+      }
+    } else if (customerMobile) {
+      // Find existing customer by mobile
+      customer = await Customer.findOne({ mobile: customerMobile });
+      if (customer) {
+        if (customerName === 'Walk-in Customer') {
+          customerName = customer.name;
+        }
+        customerState = customer.state || shopSettings.state;
+      } else if (customerName && customerName !== 'Walk-in Customer') {
+        // Auto register customer with name and mobile
+        try {
+          customer = await Customer.create({
+            name: customerName,
+            mobile: customerMobile,
+            state: shopSettings.state || 'Tamil Nadu',
+            city: shopSettings.city || 'Krishnagiri',
+          });
+        } catch (err) {
+          console.error('Error auto-creating customer during sale:', err);
+        }
+      }
+    } else if (customerName && customerName !== 'Walk-in Customer') {
+      // Find or auto-register customer by name even if mobile is not provided
+      customer = await Customer.findOne({ name: { $regex: `^${customerName}$`, $options: 'i' } });
+      if (!customer) {
+        try {
+          customer = await Customer.create({
+            name: customerName,
+            mobile: '',
+            state: shopSettings.state || 'Tamil Nadu',
+            city: shopSettings.city || 'Krishnagiri',
+          });
+        } catch (err) {
+          console.error('Error auto-creating customer during sale:', err);
+        }
       }
     }
 
@@ -220,6 +277,50 @@ router.post('/', protect, async (req, res) => {
     // Automatically send digital invoice receipt via WhatsApp
     whatsappService.sendSaleInvoiceAutoMessage(sale).catch(e => console.error('WhatsApp invoice error:', e));
 
+    // If cashier assigned a packer to pack this offline billed order
+    if (req.body.assignedPackerId) {
+      try {
+        const packerUser = await User.findById(req.body.assignedPackerId);
+        const orderItems = saleItems.map(it => ({
+          product: it.product,
+          productName: it.productName,
+          quantity: it.quantity,
+          unit: it.unit,
+          unitPrice: it.sellingPrice,
+          totalPrice: it.totalAmount,
+          isPacked: false,
+        }));
+
+        await Order.create({
+          orderType: 'offline',
+          customer: customer?._id,
+          customerName,
+          customerMobile,
+          deliveryAddress: 'In-Store Counter / Offline Pickup',
+          items: orderItems,
+          status: 'confirmed',
+          totalAmount: grandTotal,
+          paymentStatus: isCredit ? 'partially_paid' : 'paid',
+          paymentMethod: paymentMethod === 'cash' ? 'cash' : paymentMethod === 'upi' ? 'upi' : 'mixed',
+          paidAmount: amountPaid || grandTotal,
+          billedAt: new Date(),
+          billedAs: sale._id,
+          confirmedBy: req.user._id,
+          confirmedByName: req.user.name || 'Cashier',
+          confirmedByRole: req.user.role || 'cashier',
+          confirmedAt: new Date(),
+          assignedTo: packerUser?._id,
+          assignedToName: packerUser?.name || req.body.assignedPackerName,
+          assignedToRole: packerUser?.role || 'packer',
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          assignedByName: req.user.name || 'Cashier',
+        });
+      } catch (orderErr) {
+        console.error('Error creating offline order for packer assignment:', orderErr);
+      }
+    }
+
     res.status(201).json({ success: true, data: sale, message: 'Sale completed successfully' });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -237,6 +338,73 @@ router.post('/:id/void', protect, async (req, res) => {
     await auditService.log({ user: req.user, action: 'sale_voided', module: 'sales', recordId: sale._id, recordRef: sale.invoiceNumber, description: req.body.reason });
     res.json({ success: true, message: 'Sale voided successfully' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// PUT /api/sales/:id/customer — update or link customer info on an existing invoice
+router.put('/:id/customer', protect, async (req, res) => {
+  try {
+    const sale = await Sale.findById(req.params.id);
+    if (!sale) return res.status(404).json({ success: false, message: 'Sale not found' });
+
+    const { customerId, customerName, customerMobile } = req.body;
+    let customer = null;
+    let finalName = (customerName || '').trim() || 'Walk-in Customer';
+    let finalMobile = (customerMobile || '').trim();
+
+    if (customerId) {
+      customer = await Customer.findById(customerId);
+      if (customer) {
+        finalName = customer.name;
+        finalMobile = customer.mobile;
+      }
+    } else if (finalMobile) {
+      customer = await Customer.findOne({ mobile: finalMobile });
+      if (customer) {
+        if (finalName === 'Walk-in Customer') finalName = customer.name;
+      } else if (finalName && finalName !== 'Walk-in Customer') {
+        try {
+          customer = await Customer.create({
+            name: finalName,
+            mobile: finalMobile,
+          });
+        } catch (e) {
+          console.error('Auto create customer error:', e);
+        }
+      }
+    } else if (finalName && finalName !== 'Walk-in Customer') {
+      customer = await Customer.findOne({ name: { $regex: `^${finalName}$`, $options: 'i' } });
+      if (!customer) {
+        try {
+          customer = await Customer.create({
+            name: finalName,
+            mobile: '',
+          });
+        } catch (e) {
+          console.error('Auto create customer error:', e);
+        }
+      }
+    }
+
+    sale.customer = customer?._id || null;
+    sale.customerId = customer?.customerId || '';
+    sale.customerName = finalName;
+    sale.customerMobile = finalMobile;
+    await sale.save();
+
+    // If there's an offline order associated with this sale, update it too
+    await Order.updateMany(
+      { billedAs: sale._id },
+      {
+        customer: customer?._id || null,
+        customerName: finalName,
+        customerMobile: finalMobile
+      }
+    );
+
+    res.json({ success: true, data: sale, message: 'Customer updated successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 module.exports = router;

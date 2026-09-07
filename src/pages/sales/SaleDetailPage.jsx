@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Printer, RotateCcw, XCircle, ShoppingBag, CheckCircle, FileText, Store, Tag } from 'lucide-react';
+import { ArrowLeft, Printer, RotateCcw, XCircle, ShoppingBag, CheckCircle, FileText, Store, Tag, User, Edit3, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useCart } from '../../context/CartContext';
@@ -18,6 +18,37 @@ export default function SaleDetailPage() {
   const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
   const [printMode, setPrintMode] = useState('a4'); // 'a4' or 'thermal'
+  const [showEditCust, setShowEditCust] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [savingCust, setSavingCust] = useState(false);
+
+  const openEditCustomer = () => {
+    setEditName(sale?.customerName === 'Walk-in Customer' ? '' : (sale?.customerName || ''));
+    setEditMobile(sale?.customerMobile || '');
+    setShowEditCust(true);
+  };
+
+  const handleSaveCustomer = async (e) => {
+    e?.preventDefault();
+    if (!editName.trim() && !editMobile.trim()) {
+      return toast.error('Please enter at least a name or mobile number');
+    }
+    setSavingCust(true);
+    try {
+      await api.put(`/sales/${id}/customer`, {
+        customerName: editName.trim() || 'Walk-in Customer',
+        customerMobile: editMobile.trim(),
+      });
+      toast.success('Customer details updated successfully!');
+      setShowEditCust(false);
+      loadSale();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update customer');
+    } finally {
+      setSavingCust(false);
+    }
+  };
 
   const loadSale = useCallback(async () => {
     setLoading(true);
@@ -174,8 +205,15 @@ export default function SaleDetailPage() {
               <span>Time: {new Date(sale.saleDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
               <span>Cashier: {sale.createdBy?.name || 'Staff'}</span>
             </div>
-            <div className="pt-0.5">
+            <div className="pt-0.5 flex items-center justify-between">
               <span>Customer: <strong>{sale.customerName || 'Walk-in'}</strong> {sale.customerMobile ? `(${sale.customerMobile})` : ''}</span>
+              <button
+                type="button"
+                onClick={openEditCustomer}
+                className="no-print text-primary-600 hover:text-primary-800 text-[10px] font-bold underline cursor-pointer ml-1"
+              >
+                Edit
+              </button>
             </div>
           </div>
 
@@ -300,7 +338,16 @@ export default function SaleDetailPage() {
           {/* Customer & Billing Info */}
           <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4 mb-4 text-xs">
             <div>
-              <p className="font-bold text-gray-500 uppercase tracking-wider mb-1">Billed To (Customer):</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-bold text-gray-500 uppercase tracking-wider">Billed To (Customer):</p>
+                <button
+                  type="button"
+                  onClick={openEditCustomer}
+                  className="no-print text-primary-700 hover:text-primary-900 text-xs font-bold flex items-center gap-1 cursor-pointer bg-primary-50 hover:bg-primary-100 px-2 py-0.5 rounded-lg border border-primary-200 transition-colors"
+                >
+                  <Edit3 size={11} /> {sale.customerName && sale.customerName !== 'Walk-in Customer' ? 'Edit Customer' : 'Add / Link Customer'}
+                </button>
+              </div>
               <p className="font-bold text-sm text-gray-900">{sale.customerName || 'Walk-in Customer'}</p>
               {sale.customerMobile && <p className="text-gray-600">Phone: {sale.customerMobile}</p>}
               {sale.customerId && <p className="text-gray-500">Customer ID: {sale.customerId}</p>}
@@ -447,6 +494,70 @@ export default function SaleDetailPage() {
                 <span className="text-primary-700 text-2xl">{fmt(sale.grandTotal)}</span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {showEditCust && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-5 border border-gray-100 animate-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-primary-100 text-primary-700 flex items-center justify-center font-bold">
+                  <User size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-gray-900 leading-tight">Update Customer Details</h3>
+                  <p className="text-xs text-gray-500">Invoice: {sale.invoiceNumber}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditCust(false)} className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomer} className="space-y-3.5">
+              <div>
+                <label className="form-label text-xs font-bold text-gray-700">Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ramesh Kumar"
+                  className="form-input text-sm rounded-xl"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="form-label text-xs font-bold text-gray-700">Customer Mobile Number</label>
+                <input
+                  type="tel"
+                  placeholder="10-digit mobile number"
+                  className="form-input text-sm rounded-xl"
+                  value={editMobile}
+                  onChange={e => setEditMobile(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCust(false)}
+                  className="btn-ghost text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCust}
+                  className="btn-primary text-xs font-bold px-4 py-2 rounded-xl"
+                >
+                  {savingCust ? 'Saving...' : 'Save & Link Customer'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

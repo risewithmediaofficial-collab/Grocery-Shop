@@ -161,6 +161,7 @@ async function seed({ exitOnComplete = false } = {}) {
   const adminUser = await User.create({ name: 'Admin User', email: 'admin@columbu.com', password: 'admin123', role: 'admin', mobile: '9000000000' });
   const cashier1 = await User.create({ name: 'Cashier 1', email: 'cashier@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000001' });
   const cashier2 = await User.create({ name: 'Cashier 2', email: 'cashier2@columbu.com', password: 'cashier123', role: 'cashier', mobile: '9000000002' });
+  const packer1 = await User.create({ name: 'Packer Staff', email: 'packer@columbu.com', password: 'packer123', role: 'packer', mobile: '9000000003' });
 
   // Shop Settings
   await Setting.create({ key: 'shop', value: {

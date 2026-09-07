@@ -3,6 +3,17 @@ const router = express.Router();
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
+// GET /api/users/packers — Get active staff/packers available for order assignment
+router.get('/packers', protect, async (req, res) => {
+  try {
+    const packers = await User.find({
+      isActive: true,
+      role: { $in: ['packer', 'cashier', 'manager', 'admin'] }
+    }).select('_id name role email mobile').sort({ role: 1, name: 1 });
+    res.json({ success: true, data: packers });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
 router.get('/', protect, authorize('admin'), async (req, res) => {
   try {
     const users = await User.find().sort({ name: 1 });
